@@ -1,5 +1,6 @@
 # Redis - feature store only (processed telemetry features for ML)
-FROM redis:7-alpine
+# Use AWS Public ECR mirror to avoid Docker Hub timeouts
+FROM public.ecr.aws/docker/library/redis:7-alpine
 
 # Optional: custom redis.conf for persistence or limits
 # COPY redis.conf /usr/local/etc/redis/redis.conf

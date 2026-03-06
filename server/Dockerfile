@@ -1,5 +1,6 @@
 # Main Backend Server (Node.js + Express)
-FROM node:20-alpine
+# Use AWS Public ECR mirror to avoid Docker Hub timeouts
+FROM public.ecr.aws/docker/library/node:20-alpine
 
 WORKDIR /app
 

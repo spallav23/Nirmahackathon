@@ -1,5 +1,6 @@
 # NGINX API Gateway + Load Balancer
-FROM nginx:1.25-alpine
+# Use AWS Public ECR mirror to avoid Docker Hub timeouts
+FROM public.ecr.aws/docker/library/nginx:1.25-alpine
 
 # Remove default config and use our gateway config
 RUN rm -f /etc/nginx/conf.d/default.conf

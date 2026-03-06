@@ -1,8 +1,0 @@
-{
-  "name": "frontend-temp",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "build": "node -e \"const f=require('fs'); f.mkdirSync('build',{recursive:true}); f.copyFileSync('index.html','build/index.html'); if(f.existsSync('app.js')) f.copyFileSync('app.js','build/app.js');\""
-  }
-}
