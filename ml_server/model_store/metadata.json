@@ -15,6 +15,14 @@
             "auc_score": 0.94,
             "is_active": true,
             "filename": "dummy_model.py"
+        },
+        {
+            "model_id": "dummy_v20260306_110032",
+            "type": "dummy",
+            "f1_score": 0.957,
+            "auc_score": 0.977,
+            "is_active": true,
+            "filename": "dummy_model.py"
         }
     ]
 }

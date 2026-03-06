@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 class TelemetryInput(BaseModel):
     inverter_id: str
@@ -11,7 +11,8 @@ class TelemetryInput(BaseModel):
 
 class PredictionRequest(BaseModel):
     model_id: str = "auto"
-    telemetry: TelemetryInput
+    inverter_id: str  # Mandatory now because we might fetch telemetry ourselves
+    telemetry: Optional[TelemetryInput] = None
 
 class FeatureContribution(BaseModel):
     feature_name: str

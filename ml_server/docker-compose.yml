@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  # The FastAPI Machine Learning Inference Server
+  ml_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hackathon_ml_server
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis_feature_store
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092 # Placeholder for future Kafka integration
+    volumes:
+      # Mount the model store directory so models persist across container restarts
+      # and admins can drop new .pkl files onto the host machine directly.
+      - ./model_store:/app/model_store
+    depends_on:
+      redis_feature_store:
+        condition: service_healthy
+    networks:
+      - mlops_network
+    restart: unless-stopped
+
+  # The Redis Database simulating the Online Feature Store
+  redis_feature_store:
+    image: redis:7.2-alpine
+    container_name: hackathon_redis_feature_store
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - mlops_network
+    restart: unless-stopped
+
+networks:
+  mlops_network:
+    driver: bridge

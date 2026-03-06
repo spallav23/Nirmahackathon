@@ -45,15 +45,49 @@ async def predict(request: PredictionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference process failed: {str(e)}")
 
+from fastapi import BackgroundTasks
 @router.post("/train")
-async def train_model():
-    """Stub endpoint for triggering a model retraining pipeline."""
-    # In MLOps architecture, this would upload to S3 and trigger an Airflow/Prefect job.
+async def train_model(background_tasks: BackgroundTasks):
+    """
+    Endpoint for admins to trigger a model retraining pipeline.
+    Runs entirely in the background so the API does not block.
+    """
+    import uuid
+    job_id = str(uuid.uuid4())[:8]
+    
+    from app.services.training_pipeline import run_training_pipeline_task
+    background_tasks.add_task(run_training_pipeline_task, job_id)
+    
     return {
         "status": "queued",
-        "job_id": "job_9999",
-        "message": "Model training pipeline successfully triggered in the background."
+        "job_id": job_id,
+        "message": "Continuous Learning pipeline triggered. Monitor server logs."
     }
+
+from app.schemas.admin import ModelParameterUpdate
+@router.put("/models/{model_id}/parameters")
+async def update_model_parameters(model_id: str, params: ModelParameterUpdate):
+    """
+    MLOps Admin Endpoint:
+    Dynamically adjust hyperparameters/thresholds of a running model in the registry
+    without needing to restart the FastAPI server.
+    """
+    try:
+        model, actual_id = registry.get_model(model_id)
+        
+        # Check if the model supports dynamic updates (our DummyModel does)
+        if hasattr(model, 'update_parameters'):
+            model.update_parameters(params.model_dump())
+            return {
+                "status": "success", 
+                "message": f"Parameters updated for model {actual_id}",
+                "new_parameters": params.model_dump()
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"Model {actual_id} does not support dynamic parameter updates.")
+            
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
 
 from fastapi import UploadFile, File
 @router.post("/models/upload")

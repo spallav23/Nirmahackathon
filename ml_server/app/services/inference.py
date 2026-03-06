@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 from app.schemas.predict import PredictionRequest, PredictionResponse, FeatureContribution
 from app.services.model_registry import registry
+from app.services.redis_client import feature_store
 
 logger = logging.getLogger("ml_server.inference")
 
@@ -12,12 +13,22 @@ async def run_prediction_async(request: PredictionRequest) -> PredictionResponse
     """
     MLOps Async Inference wrapper.
     Ensures that heavy ML CPU operations do not block the FastAPI event loop.
+    Supports Online Feature Fetching.
     """
     requested_model_id = request.model_id
-    telemetry_data = request.telemetry.model_dump()
-    inverter_id = telemetry_data.get("inverter_id", "unknown")
+    inverter_id = request.inverter_id
 
-    # 1. Fetch the Model from Registry
+    # 1. LIVE DATA FETCHING (Online Inference Setup)
+    if request.telemetry:
+        logger.info(f"Using provided telemetry payload for {inverter_id}")
+        telemetry_data = request.telemetry.model_dump()
+    else:
+        logger.info(f"No telemetry provided. Fetching live online data for {inverter_id} from Feature Store.")
+        telemetry_data = feature_store.get_live_telemetry(inverter_id)
+        if not telemetry_data:
+            raise ValueError(f"Could not find live telemetry data for {inverter_id} in Feature Store.")
+
+    # 2. Fetch the Model from Registry
     try:
         model, actual_model_id = registry.get_model(requested_model_id)
     except ValueError as e:
