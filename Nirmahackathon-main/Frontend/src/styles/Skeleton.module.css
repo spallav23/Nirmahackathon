@@ -1,0 +1,80 @@
+.line,
+.cardLine,
+.bar,
+.tableCell {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--border) 50%,
+    var(--bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shine 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+@keyframes skeleton-shine {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.cardLine {
+  margin-bottom: 0.75rem;
+  height: 0.875rem;
+}
+
+.cardLine:last-child {
+  margin-bottom: 0;
+}
+
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 200px;
+  padding: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.bar {
+  flex: 1;
+  min-width: 24px;
+  border-radius: 4px 4px 0 0;
+}
+
+.table {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.tableRow {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.tableRow:last-child {
+  border-bottom: none;
+}
+
+.tableCell {
+  flex: 1;
+  min-width: 80px;
+  height: 2.5rem;
+  border-radius: 0;
+}
+
+.tableRow:first-child .tableCell {
+  height: 2.75rem;
+  background: var(--bg-secondary);
+}

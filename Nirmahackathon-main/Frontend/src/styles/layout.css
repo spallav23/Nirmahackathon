@@ -1,0 +1,147 @@
+/* Layout: sidebar + main - light theme */
+.layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+.layout__sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border);
+  padding: 1rem 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow);
+}
+
+.layout__sidebar nav {
+  flex: 1;
+}
+
+.layout__brand {
+  padding: 0 1.25rem 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+
+.layout__brandText {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.layout__user {
+  padding: 1rem 1.25rem;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+}
+
+.layout__userName {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.layout__logout {
+  display: block;
+  margin-top: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+  padding: 0;
+  font-weight: 500;
+}
+
+.layout__logout:hover {
+  color: var(--accent-hover);
+}
+
+.layout__main {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-x: hidden;
+  background: var(--bg-primary);
+}
+
+.layout__nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.layout__nav a {
+  display: block;
+  padding: 0.75rem 1.25rem;
+  color: var(--text-secondary);
+  border-left: 3px solid transparent;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+  font-weight: 500;
+}
+
+.layout__nav a:hover,
+.layout__nav a.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+}
+
+.layout__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.layout__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 768px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .layout__sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem;
+  }
+
+  .layout__nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: center;
+  }
+
+  .layout__nav a {
+    padding: 0.5rem 0.75rem;
+    border-left: none;
+    border-bottom: 2px solid transparent;
+  }
+
+  .layout__nav a.active {
+    border-left: none;
+    border-bottom-color: var(--accent);
+  }
+
+  .layout__main {
+    padding: 1rem;
+  }
+}

@@ -1,0 +1,109 @@
+/* AI-Driven Solar Inverter Failure Prediction - Light theme (matches login) */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Backgrounds - light blue grey to match login */
+  --bg-primary: #e8eef5;
+  --bg-secondary: #f0f4fa;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fafbfd;
+  --border: #d4dceb;
+  --border-light: #c2cddf;
+
+  /* Text - dark on light */
+  --text-primary: #0c1222;
+  --text-secondary: #4a5568;
+  --text-muted: #64748b;
+
+  /* Accent - cyan/blue (same as login) */
+  --accent: #0ea5e9;
+  --accent-hover: #0284c7;
+  --accent-soft: rgba(14, 165, 233, 0.12);
+  --accent-glow: rgba(14, 165, 233, 0.2);
+
+  /* Risk colors - work on light background */
+  --risk-high: #dc2626;
+  --risk-high-soft: rgba(220, 38, 38, 0.12);
+  --risk-medium: #d97706;
+  --risk-medium-soft: rgba(217, 119, 6, 0.12);
+  --risk-low: #059669;
+  --risk-low-soft: rgba(5, 150, 105, 0.12);
+
+  /* UI */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 2px 12px rgba(12, 18, 34, 0.08);
+  --shadow-lg: 0 4px 24px rgba(12, 18, 34, 0.1);
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+/* Utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.risk-high {
+  color: var(--risk-high);
+}
+
+.risk-medium {
+  color: var(--risk-medium);
+}
+
+.risk-low {
+  color: var(--risk-low);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

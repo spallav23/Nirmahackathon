@@ -1,0 +1,36 @@
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.error {
+  color: var(--risk-high);
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.section {
+  margin-bottom: 2rem;
+}
+
+.sectionTitle {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  color: var(--text-primary);
+}
+
+.chartWrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  min-height: 280px;
+}
+
+@media (max-width: 768px) {
+  .chartWrap {
+    padding: 0.75rem;
+    min-height: 260px;
+  }
+}

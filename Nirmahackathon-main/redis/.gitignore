@@ -1,0 +1,9 @@
+# Data (if persistence dir used)
+data/
+*.rdb
+*.aof
+
+# IDE / OS
+.idea
+.vscode
+.DS_Store
