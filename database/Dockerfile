@@ -1,5 +1,6 @@
 # MongoDB - centralized database for the platform
-FROM mongo:7
+# Use AWS Public ECR mirror to avoid Docker Hub timeouts
+FROM public.ecr.aws/docker/library/mongo:7
 
 # Optional: copy init scripts for collections (users, inverter_predictions, models, telemetry_data, alerts)
 # COPY init.js /docker-entrypoint-initdb.d/

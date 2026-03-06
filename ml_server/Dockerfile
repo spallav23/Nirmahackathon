@@ -1,12 +1,23 @@
-# ML Prediction Server (Python + FastAPI)
-FROM python:3.11-slim
+# ML Prediction Server - AI-Driven Solar Inverter Failure Prediction
+# Supports XGBoost, LightGBM, RandomForest; SHAP explainability; Redis; Kafka
+FROM public.ecr.aws/docker/library/python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements*.txt ./
-RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || pip install --no-cache-dir fastapi uvicorn redis kafka-python pydantic
+# Install curl for healthcheck and system deps (including libgomp for XGBoost/LightGBM)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       curl \
+       libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Run tests before image creation (per base prompt)
+RUN pytest tests/ -v --tb=short
 
 EXPOSE 8000
 

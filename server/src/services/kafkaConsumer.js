@@ -16,6 +16,7 @@ function parsePayload(value) {
 
 async function savePrediction(payload) {
   const {
+    requestId,
     userId,
     inverterId,
     riskScore,
@@ -29,6 +30,7 @@ async function savePrediction(payload) {
   const doc = {
     userId: userId || null,
     inverterId: String(inverterId || 'unknown'),
+    requestId: requestId || null,
     riskScore: Number(riskScore) ?? 0,
     modelOutput,
     topFeatures: Array.isArray(topFeatures) ? topFeatures : [],
@@ -43,6 +45,11 @@ async function savePrediction(payload) {
       console.warn('Summary generation failed:', e.message);
     }
     doc.summary = summary;
+    // Prevent duplicates if the main-server already stored this prediction synchronously.
+    if (doc.requestId) {
+      const existing = await PredictionHistory.findOne({ requestId: doc.requestId }).lean();
+      if (existing) return;
+    }
     await PredictionHistory.create(doc);
     console.log('Stored prediction from Kafka:', doc.inverterId, doc.riskScore);
   } catch (err) {

@@ -39,6 +39,29 @@ async function register(req, res, next) {
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
+
+    // Static Admin User Bypass
+    if (email === 'admin@gmail.com' && password === '12345678') {
+      const adminId = '000000000000000000000000'; // Mocked ObjectId
+      const accessToken = signAccessToken({ userId: adminId });
+      const refreshToken = signRefreshToken({ userId: adminId });
+      return res.json({
+        success: true,
+        data: {
+          user: {
+            _id: adminId,
+            name: 'System Admin',
+            email: 'admin',
+            role: 'admin',
+            isEmailVerified: true
+          },
+          accessToken,
+          refreshToken,
+          expiresIn: '7d',
+        },
+      });
+    }
+
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
@@ -116,6 +139,20 @@ async function verifyEmail(req, res, next) {
   }
 }
 
+async function verifyEmailFromQuery(req, res, next) {
+  try {
+    const token = req.query.token;
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'Verification token required' });
+    }
+    // Reuse the same logic by delegating into the existing handler shape.
+    req.body = { token };
+    return verifyEmail(req, res, next);
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function resendVerification(req, res, next) {
   try {
     const { email } = req.body;
@@ -183,6 +220,20 @@ async function resetPassword(req, res, next) {
 
 async function me(req, res, next) {
   try {
+    // Return mocked admin user if the JWT decodes to the admin ID
+    if (req.user._id.toString() === '000000000000000000000000') {
+      return res.json({
+        success: true, data: {
+          user: {
+            _id: req.user._id,
+            name: 'System Admin',
+            email: 'admin',
+            role: 'admin',
+            isEmailVerified: true
+          }
+        }
+      });
+    }
     res.json({ success: true, data: { user: req.user } });
   } catch (err) {
     next(err);
@@ -205,11 +256,30 @@ async function changePassword(req, res, next) {
   }
 }
 
+async function verifyEmailDev(req, res, next) {
+  try {
+    const { email } = req.params;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    user.isEmailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save({ validateBeforeSave: false });
+    res.json({ success: true, message: 'Dev mode: Email verified successfully' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   register,
   login,
   refresh,
   verifyEmail,
+  verifyEmailFromQuery,
+  verifyEmailDev,
   resendVerification,
   forgotPassword,
   resetPassword,

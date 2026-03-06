@@ -34,4 +34,18 @@ async function postSummary(req, res, next) {
   }
 }
 
-module.exports = { postSummary };
+async function postChat(req, res, next) {
+  try {
+    const { message, history } = req.body;
+    if (!message) {
+      return res.status(400).json({ success: false, message: 'Message is required' });
+    }
+    const { generateChat } = require('../services/geminiService');
+    const reply = await generateChat(message, history || []);
+    res.json({ success: true, data: { reply } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { postSummary, postChat };

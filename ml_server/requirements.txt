@@ -1,3 +1,21 @@
+# ML Prediction Server - AI-Driven Solar Inverter Failure Prediction
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
-kafka-python==2.0.2
+pydantic>=2.0
+# Starlette TestClient compatibility (prevents httpx 0.28 breaking tests)
+httpx<0.28
+python-multipart>=0.0.9
+# ML & Data
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+xgboost>=2.0.0
+lightgbm>=4.0.0
+shap>=0.44.0
+joblib>=1.3.0
+openpyxl>=3.1.0
+# Feature Store & Events
+redis>=5.0.0
+kafka-python>=2.0.2
+# Testing
+pytest>=7.0.0

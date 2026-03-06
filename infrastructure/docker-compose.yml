@@ -1,29 +1,7 @@
 # AI-Driven Solar Inverter Failure Prediction & Intelligence Platform
 # Main orchestration file - all services support horizontal scaling
 
-version: "3.8"
-
 services:
-  # ---------------------------------------------------------------------------
-  # Frontend
-  # ---------------------------------------------------------------------------
-  frontend:
-    build:
-      context: ../Frontend
-      dockerfile: Dockerfile
-    container_name: frontend
-    restart: unless-stopped
-    ports:
-      - "3000:80"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    deploy:
-      replicas: 1
-
   # ---------------------------------------------------------------------------
   # NGINX API Gateway + Load Balancer
   # ---------------------------------------------------------------------------
@@ -37,14 +15,10 @@ services:
       - "80:80"
       - "443:443"
     depends_on:
-      frontend:
-        condition: service_healthy
       main-server:
         condition: service_healthy
-      ml-server:
-        condition: service_healthy
-      llm-service:
-        condition: service_healthy
+      # ml-server:
+      #   condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 15s
@@ -69,8 +43,15 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC_PREDICTIONS: ${KAFKA_TOPIC_PREDICTIONS:-prediction_events}
+      ML_SERVER_URL: http://ml-server:8000
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-AIzaSyABun2Yg9up7bUl4_XJOgyrIv4oRjWCq44}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -78,12 +59,14 @@ services:
         condition: service_healthy
       kafka:
         condition: service_started
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
-      interval: 20s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+      ml-server:
+        condition: service_healthy
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:3001/api/auth/me"]
+    #   interval: 20s
+    #   timeout: 5s
+    #   retries: 3
+    #   start_period: 15s
     deploy:
       replicas: 1
 
@@ -95,45 +78,27 @@ services:
       context: ../ml_server
       dockerfile: Dockerfile
     container_name: ml-server
+    ports:
+      - "8000:8000"
     restart: unless-stopped
     environment:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ml_models:/app/models
+
     depends_on:
       redis:
         condition: service_healthy
       kafka:
         condition: service_started
+      
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 20s
       timeout: 5s
       retries: 3
       start_period: 20s
-    deploy:
-      replicas: 1
-
-  # ---------------------------------------------------------------------------
-  # LLM Service (RAG + Gemini)
-  # ---------------------------------------------------------------------------
-  llm-service:
-    build:
-      context: ../llm_service
-      dockerfile: Dockerfile
-    container_name: llm-service
-    restart: unless-stopped
-    environment:
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      KAFKA_BROKERS: kafka:9092
-    depends_on:
-      kafka:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 20s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
     deploy:
       replicas: 1
 
@@ -152,10 +117,10 @@ services:
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-spp23102003@gmail.com}
-      SMTP_PASS: ${SMTP_PASS:-cscv mirq sqgr wnhz}
-      SMTP_FROM: ${SMTP_FROM:-spp23102003@gmail.com}
-      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-spp23102003@gmail.com}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
     depends_on:
       kafka:
         condition: service_started
@@ -179,6 +144,8 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -200,8 +167,6 @@ services:
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin}
       MONGO_INITDB_DATABASE: inverter_platform
     volumes:
       - mongodb_data:/data/db
@@ -218,15 +183,16 @@ services:
   # Apache Kafka Event Bus
   # ---------------------------------------------------------------------------
   zookeeper:
-    image: bitnami/zookeeper:3.9
+    image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
     restart: unless-stopped
     environment:
-      ALLOW_ANONYMOUS_LOGIN: "yes"
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
     volumes:
-      - zookeeper_data:/bitnami/zookeeper
+      - zookeeper_data:/var/lib/zookeeper/data
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "2181"]
       interval: 10s
@@ -243,18 +209,24 @@ services:
     ports:
       - "9092:9092"
       - "9093:9093"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
     environment:
-      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,EXTERNAL://:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     depends_on:
       zookeeper:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -265,6 +237,9 @@ services:
 volumes:
   mongodb_data:
   zookeeper_data:
+  redis_data:
+  kafka_data:
+  ml_models:
 
 networks:
   default:

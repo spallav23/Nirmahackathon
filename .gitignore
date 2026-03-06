@@ -1,0 +1,126 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependencies
+node_modules/
+jspm_packages/
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Production Builds
+dist/
+dist-ssr/
+build/
+out/
+.next/
+
+# Python Virtual Environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+
+# Python Cache & Byproducts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Cypress
+cypress/videos/
+cypress/screenshots/
+
+# System Configs
+*.pem
+*.cert
+*.crt
+*.key
+
+# Large Datasets / Files
+*.csv
+*.xlsx
+*.xls
+*.tsv
+*.jsonl
+*.parquet
+*.snappy
+*.npz
+*.npy
+
+# Machine Learning Models
+*.pkl
+*.h5
+*.hdf5
+*.pth
+*.pt
+*.onnx
+*.pb
+*.tflite
+*.safetensors
+*.ckpt
+
+# Project-Specific ML Assets
+ml_server/models/
+ml_server/plots/
+
+# Infrastructure / Databases
+database/data/
+docker_data/
+zookeeper_data/
+mongodb_data/
+ml_server/solar_ml_master_dataset.xlsx

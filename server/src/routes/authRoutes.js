@@ -32,9 +32,14 @@ router.post('/register', validate(registerValidation), authController.register);
 router.post('/login', validate(loginValidation), authController.login);
 router.post('/refresh', validate(refreshValidation), authController.refresh);
 router.post('/verify-email', validate(verifyEmailValidation), authController.verifyEmail);
+// Supports email links like `${FRONTEND_URL}/verify-email?token=...`
+router.get('/verify-email', authController.verifyEmailFromQuery);
 router.post('/resend-verification', validate(resendVerificationValidation), authController.resendVerification);
 router.post('/forgot-password', validate(forgotPasswordValidation), authController.forgotPassword);
 router.post('/reset-password', validate(resetPasswordValidation), authController.resetPassword);
+
+// Dev bypass: marks email verified instantly without SMTP token wait
+router.get('/verify-email-dev/:email', authController.verifyEmailDev);
 
 router.get('/me', protect, authController.me);
 router.post('/change-password', protect, validate(changePasswordValidation), authController.changePassword);

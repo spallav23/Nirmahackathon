@@ -1,7 +1,27 @@
 const nodemailer = require('nodemailer');
-const { smtp, frontendUrl } = require('../config/env');
+const { Kafka } = require('kafkajs');
+const { smtp, frontendUrl, kafkaBrokers, kafkaTopicEmails } = require('../config/env');
 
 let transporter = null;
+let kafkaProducer = null;
+
+async function getKafkaProducer() {
+  if (kafkaProducer) return kafkaProducer;
+  if (!kafkaBrokers || !kafkaBrokers.length) return null;
+  const kafka = new Kafka({
+    clientId: 'email-producer',
+    brokers: kafkaBrokers,
+  });
+  kafkaProducer = kafka.producer();
+  try {
+    await kafkaProducer.connect();
+    return kafkaProducer;
+  } catch (err) {
+    console.error('Kafka Producer connection error:', err.message);
+    kafkaProducer = null;
+    return null;
+  }
+}
 
 function getTransporter() {
   if (transporter) return transporter;
@@ -19,10 +39,26 @@ function getTransporter() {
 }
 
 async function sendMail(options) {
-  const transport = getTransporter();
+  const producer = await getKafkaProducer();
   const from = options.from || smtp.from;
+
+  if (producer) {
+    try {
+      await producer.send({
+        topic: kafkaTopicEmails,
+        messages: [{ value: JSON.stringify({ ...options, from }) }],
+      });
+      console.log(`[Email] Kafka event sent to topic ${kafkaTopicEmails} for ${options.to}`);
+      return;
+    } catch (err) {
+      console.error('[Email] Failed to send Kafka event:', err.message);
+    }
+  }
+
+  // Fallback to Nodemailer if Kafka is not available or fails
+  const transport = getTransporter();
   if (!transport) {
-    console.log('[Email (no SMTP)]', { to: options.to, subject: options.subject });
+    console.log('[Email (no SMTP, no Kafka)]', { to: options.to, subject: options.subject });
     return;
   }
   await transport.sendMail({ ...options, from });
