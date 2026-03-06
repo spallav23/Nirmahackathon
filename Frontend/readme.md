@@ -1,6 +1,8 @@
 # Frontend
 
-React operational dashboard for the AI-Driven Solar Inverter Failure Prediction & Intelligence Platform. Responsive UI with login, inverter dashboard, risk trend charts, AI explanation panel, and operator query interface.
+**Current: temporary single-page test UI** to exercise all services (auth, profile, history, summary, ML predict). Replace with the full React dashboard when ready.
+
+React operational dashboard for the AI-Driven Solar Inverter Failure Prediction & Intelligence Platform (planned): responsive UI with login, inverter dashboard, risk trend charts, AI explanation panel, and operator query interface.
 
 ## Tech
 

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Temp – Test All Services</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: #1a1a2e; color: #eee; max-width: 900px; margin: 0 auto; }
+    h1 { color: #0f3460; font-size: 1.5rem; }
+    h2 { color: #e94560; font-size: 1.1rem; margin-top: 24px; border-bottom: 1px solid #333; padding-bottom: 6px; }
+    section { background: #16213e; padding: 12px 16px; border-radius: 8px; margin-bottom: 12px; }
+    input, button, textarea { padding: 8px 12px; margin: 4px; border-radius: 6px; border: 1px solid #333; background: #0f3460; color: #eee; }
+    button { cursor: pointer; background: #e94560; border: none; }
+    button:hover { opacity: 0.9; }
+    pre { background: #0f3460; padding: 12px; border-radius: 6px; overflow: auto; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .status { font-size: 12px; color: #8f8; }
+    .err { color: #f88; }
+  </style>
+</head>
+<body>
+  <h1>Temp – Test All Services</h1>
+  <p class="status">API base: <span id="apiBase">/api</span> · ML base: <span id="mlBase">/ml</span> · Token: <span id="tokenStatus">none</span></p>
+
+  <h2>Auth</h2>
+  <section>
+    <div class="row">
+      <input id="regName" placeholder="Name" size="10" />
+      <input id="regEmail" type="email" placeholder="Email" size="20" />
+      <input id="regPass" type="password" placeholder="Password" size="12" />
+      <button onclick="register()">Register</button>
+    </div>
+    <div class="row">
+      <input id="loginEmail" type="email" placeholder="Email" size="20" />
+      <input id="loginPass" type="password" placeholder="Password" size="12" />
+      <button onclick="login()">Login</button>
+    </div>
+    <button onclick="logout()">Clear token</button>
+    <pre id="authOut">-</pre>
+  </section>
+
+  <h2>Profile</h2>
+  <section>
+    <button onclick="getProfile()">GET /profile</button>
+    <div class="row">
+      <input id="upName" placeholder="Name" size="12" />
+      <input id="upPhone" placeholder="Phone" size="14" />
+      <button onclick="updateProfile()">PUT /profile</button>
+    </div>
+    <pre id="profileOut">-</pre>
+  </section>
+
+  <h2>History</h2>
+  <section>
+    <button onclick="getHistory()">GET /history</button>
+    <input id="histInverter" placeholder="inverterId filter" size="15" />
+    <pre id="historyOut">-</pre>
+  </section>
+
+  <h2>Summary (Gemini)</h2>
+  <section>
+    <input id="sumPredId" placeholder="predictionId (optional)" size="24" />
+    <button onclick="postSummary()">POST /summary</button>
+    <pre id="summaryOut">-</pre>
+  </section>
+
+  <h2>ML – Random score + Kafka</h2>
+  <section>
+    <input id="mlInverter" placeholder="Inverter ID" value="INV-TEMP-001" size="16" />
+    <button onclick="mlPredict()">POST /ml/predict (random score → Kafka)</button>
+    <pre id="mlOut">-</pre>
+  </section>
+
+  <h2>Health</h2>
+  <section>
+    <button onclick="health()">GET /api/health</button>
+    <pre id="healthOut">-</pre>
+  </section>
+
+  <script>
+    const API = '/api';
+    const ML = '/ml';
+
+    function headers(includeAuth) {
+      const h = { 'Content-Type': 'application/json' };
+      const t = localStorage.getItem('token');
+      if (includeAuth && t) h['Authorization'] = 'Bearer ' + t;
+      return h;
+    }
+
+    function setTokenStatus() {
+      document.getElementById('tokenStatus').textContent = localStorage.getItem('token') ? 'set' : 'none';
+    }
+    setTokenStatus();
+
+    async function req(method, url, body, auth = true) {
+      const opt = { method, headers: headers(auth) };
+      if (body) opt.body = JSON.stringify(body);
+      const r = await fetch(url, opt);
+      const text = await r.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      return { ok: r.ok, status: r.status, data };
+    }
+
+    function out(id, obj) {
+      document.getElementById(id).textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+    }
+
+    async function register() {
+      const name = document.getElementById('regName').value.trim();
+      const email = document.getElementById('regEmail').value.trim();
+      const pass = document.getElementById('regPass').value;
+      const res = await req('POST', API + '/auth/register', { name, email, password: pass }, false);
+      out('authOut', res.data);
+      if (res.ok && res.data.data && res.data.data.accessToken) {
+        localStorage.setItem('token', res.data.data.accessToken);
+        setTokenStatus();
+      }
+    }
+
+    async function login() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const pass = document.getElementById('loginPass').value;
+      const res = await req('POST', API + '/auth/login', { email, password: pass }, false);
+      out('authOut', res.data);
+      if (res.ok && res.data.data && res.data.data.accessToken) {
+        localStorage.setItem('token', res.data.data.accessToken);
+        setTokenStatus();
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      setTokenStatus();
+      out('authOut', '-');
+    }
+
+    async function getProfile() {
+      const res = await req('GET', API + '/profile');
+      out('profileOut', res.data);
+    }
+
+    async function updateProfile() {
+      const body = {};
+      const n = document.getElementById('upName').value.trim();
+      const ph = document.getElementById('upPhone').value.trim();
+      if (n) body.name = n;
+      if (ph) body.phone = ph;
+      const res = await req('PUT', API + '/profile', body);
+      out('profileOut', res.data);
+    }
+
+    async function getHistory() {
+      const inv = document.getElementById('histInverter').value.trim();
+      const url = inv ? API + '/history?inverterId=' + encodeURIComponent(inv) : API + '/history';
+      const res = await req('GET', url);
+      out('historyOut', res.data);
+    }
+
+    async function postSummary() {
+      const predId = document.getElementById('sumPredId').value.trim();
+      const body = predId ? { predictionId: predId } : {};
+      const res = await req('POST', API + '/summary', body);
+      out('summaryOut', res.data);
+    }
+
+    async function mlPredict() {
+      const inverterId = document.getElementById('mlInverter').value.trim() || 'INV-TEMP-001';
+      let userId = null;
+      try {
+        const pr = await req('GET', API + '/profile');
+        if (pr.ok && pr.data.data && pr.data.data.profile && pr.data.data.profile._id) userId = pr.data.data.profile._id;
+      } catch (_) {}
+      const res = await req('POST', ML + '/predict', { inverterId, userId });
+      out('mlOut', res.data);
+    }
+
+    async function health() {
+      const res = await req('GET', API + '/health', null, false);
+      out('healthOut', res.data);
+    }
+  </script>
+</body>
+</html>

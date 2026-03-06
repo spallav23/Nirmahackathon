@@ -1,6 +1,8 @@
 # ML Server
 
-Python + FastAPI service for failure prediction: load models, run inference, compute risk score, SHAP explainability. Supports XGBoost, LightGBM, RandomForest.
+**Current: temporary server** that returns a random risk score on `POST /predict` and publishes the result to Kafka (`prediction_events`). Replace with real ML models (XGBoost, LightGBM, RandomForest + SHAP) when ready.
+
+Python + FastAPI service for failure prediction (planned): load models, run inference, compute risk score, SHAP explainability. Supports XGBoost, LightGBM, RandomForest.
 
 ## Endpoints
 
