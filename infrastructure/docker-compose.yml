@@ -145,16 +145,20 @@ services:
     container_name: notification-service
     restart: unless-stopped
     environment:
-      KAFKA_BROKERS: kafka:9092
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_TOPIC_NOTIFICATIONS: ${KAFKA_TOPIC_NOTIFICATIONS:-notification_events}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM: ${SMTP_FROM:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
     depends_on:
       kafka:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3002/health"]
       interval: 20s
       timeout: 5s
       retries: 3
