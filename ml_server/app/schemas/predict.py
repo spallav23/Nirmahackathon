@@ -10,7 +10,7 @@ class TelemetryInput(BaseModel):
     alarm_frequency: int
 
 class PredictionRequest(BaseModel):
-    model_id: str = "dummy_v1"
+    model_id: str = "auto"
     telemetry: TelemetryInput
 
 class FeatureContribution(BaseModel):

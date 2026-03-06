@@ -15,11 +15,11 @@ def test_list_models():
     assert response.status_code == 200
     body = response.json()
     assert "available_models" in body
-    assert "dummy_v1" in body["available_models"]
+    assert any(m["model_id"] == "dummy_v1" for m in body["available_models"])
 
 def test_predict_success():
     payload = {
-        "model_id": "dummy_v1",
+        "model_id": "auto",
         "telemetry": {
             "inverter_id": "INV-TEST-01",
             "temperature_avg": 45.0,

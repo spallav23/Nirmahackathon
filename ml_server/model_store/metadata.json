@@ -1,0 +1,20 @@
+{
+    "models": [
+        {
+            "model_id": "dummy_v1",
+            "type": "dummy",
+            "f1_score": 0.81,
+            "auc_score": 0.85,
+            "is_active": true,
+            "filename": "dummy_model.py"
+        },
+        {
+            "model_id": "dummy_v2",
+            "type": "dummy",
+            "f1_score": 0.92,
+            "auc_score": 0.94,
+            "is_active": true,
+            "filename": "dummy_model.py"
+        }
+    ]
+}

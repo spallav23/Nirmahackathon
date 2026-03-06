@@ -13,19 +13,19 @@ async def run_prediction_async(request: PredictionRequest) -> PredictionResponse
     MLOps Async Inference wrapper.
     Ensures that heavy ML CPU operations do not block the FastAPI event loop.
     """
-    model_id = request.model_id
+    requested_model_id = request.model_id
     telemetry_data = request.telemetry.model_dump()
     inverter_id = telemetry_data.get("inverter_id", "unknown")
 
     # 1. Fetch the Model from Registry
     try:
-        model = registry.get_model(model_id)
+        model, actual_model_id = registry.get_model(requested_model_id)
     except ValueError as e:
         logger.error(str(e))
         raise e
 
     # 2. Run Inference in a separate thread to prevent blocking
-    logger.info(f"Starting inference async for inverter {inverter_id} using {model_id}")
+    logger.info(f"Starting inference async for inverter {inverter_id} using {actual_model_id}")
     try:
         # Run the CPU-bound predict method in a threadpool
         risk_score = await asyncio.to_thread(model.predict, telemetry_data)

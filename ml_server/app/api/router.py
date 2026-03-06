@@ -21,8 +21,7 @@ def list_models():
 @router.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
     """
-    Predicts the risk of inverter failure asynchronously using the dummy model.
-    Also produces a Kafka event.
+    Predicts the risk of inverter failure asynchronously using the best model.
     """
     try:
         # Run prediction asynchronously
@@ -54,4 +53,17 @@ async def train_model():
         "status": "queued",
         "job_id": "job_9999",
         "message": "Model training pipeline successfully triggered in the background."
+    }
+
+from fastapi import UploadFile, File
+@router.post("/models/upload")
+async def upload_model(file: UploadFile = File(...)):
+    """
+    Endpoint for a teammate's CI/CD pipeline to upload a new .pkl model.
+    In real life this would save to model_store/ and dynamically update metadata.json.
+    """
+    return {
+        "status": "success",
+        "message": f"Successfully received {file.filename}.",
+        "instruction": "Registry metadata update logic is currently stubbed."
     }
