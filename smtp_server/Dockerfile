@@ -23,12 +23,12 @@ ENV KAFKA_TOPIC_NOTIFICATIONS=notification_events
 ENV SMTP_HOST=smtp.gmail.com
 ENV SMTP_PORT=587
 ENV SMTP_SECURE=false
-ENV SMTP_USER=
-ENV SMTP_PASS=
-ENV SMTP_FROM=
+ENV SMTP_USER=spp23102003@gmail.com
+ENV SMTP_PASS=cscv mirq sqgr wnhz
+ENV SMTP_FROM=spp23102003@gmail.com
 
 # Optional: default recipient for alerts (defaults to SMTP_USER if not set)
-ENV ALERT_EMAIL_TO=
+ENV ALERT_EMAIL_TO=spp23102003@gmail.com
 
 HEALTHCHECK --interval=20s --timeout=5s --retries=3 --start-period=10s \
   CMD wget -q --spider http://localhost:3002/health || exit 1

@@ -150,10 +150,10 @@ services:
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASS: ${SMTP_PASS}
-      SMTP_FROM: ${SMTP_FROM:-}
-      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      SMTP_USER: ${SMTP_USER:-spp23102003@gmail.com}
+      SMTP_PASS: ${SMTP_PASS:-cscv mirq sqgr wnhz}
+      SMTP_FROM: ${SMTP_FROM:-spp23102003@gmail.com}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-spp23102003@gmail.com}
     depends_on:
       kafka:
         condition: service_started
