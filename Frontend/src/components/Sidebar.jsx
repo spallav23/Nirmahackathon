@@ -1,8 +1,11 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Activity, MessageSquare, Settings as SettingsIcon, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, Activity, MessageSquare, Settings as SettingsIcon, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Sidebar = () => {
+    const { user } = useAuth();
+
     const links = [
         { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
         { name: 'Inverters', path: '/inverter/INV-204', icon: <Activity size={20} /> },
@@ -10,6 +13,10 @@ const Sidebar = () => {
         { name: 'Alerts', path: '/', icon: <AlertTriangle size={20} /> },
         { name: 'Settings', path: '/settings', icon: <SettingsIcon size={20} /> },
     ];
+
+    if (user?.role === 'admin') {
+        links.push({ name: 'Admin Console', path: '/admin', icon: <ShieldAlert size={20} /> });
+    }
 
     return (
         <aside className="app-sidebar" style={{

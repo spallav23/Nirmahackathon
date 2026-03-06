@@ -1,5 +1,6 @@
 # Python
 __pycache__
+.pytest_cache
 *.py[cod]
 *$py.class
 *.so
@@ -12,7 +13,7 @@ env
 .eggs
 dist
 build
-
+.xlsx
 # ML / data
 *.pkl
 *.joblib

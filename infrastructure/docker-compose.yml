@@ -43,8 +43,15 @@ services:
       REDIS_URL: redis://redis:6379
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC_PREDICTIONS: ${KAFKA_TOPIC_PREDICTIONS:-prediction_events}
+      ML_SERVER_URL: http://ml-server:8000
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-AIzaSyABun2Yg9up7bUl4_XJOgyrIv4oRjWCq44}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -52,8 +59,10 @@ services:
         condition: service_healthy
       kafka:
         condition: service_started
+      ml-server:
+        condition: service_healthy
     # healthcheck:
-    #   test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+    #   test: ["CMD", "curl", "-f", "http://localhost:3001/api/auth/me"]
     #   interval: 20s
     #   timeout: 5s
     #   retries: 3
@@ -64,28 +73,34 @@ services:
   # ---------------------------------------------------------------------------
   # ML Prediction Server (Python + FastAPI)
   # ---------------------------------------------------------------------------
-  # ml-server:
-  #   build:
-  #     context: ../ml_server
-  #     dockerfile: Dockerfile
-  #   container_name: ml-server
-  #   restart: unless-stopped
-  #   environment:
-  #     REDIS_URL: redis://redis:6379
-  #     KAFKA_BROKERS: kafka:9092
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #     kafka:
-  #       condition: service_started
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  #     interval: 20s
-  #     timeout: 5s
-  #     retries: 3
-  #     start_period: 20s
-  #   deploy:
-  #     replicas: 1
+  ml-server:
+    build:
+      context: ../ml_server
+      dockerfile: Dockerfile
+    container_name: ml-server
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    volumes:
+      - ml_models:/app/models
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      replicas: 1
 
   # ---------------------------------------------------------------------------
   # SMTP Notification Service
@@ -129,6 +144,8 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -192,6 +209,8 @@ services:
     ports:
       - "9092:9092"
       - "9093:9093"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -218,6 +237,9 @@ services:
 volumes:
   mongodb_data:
   zookeeper_data:
+  redis_data:
+  kafka_data:
+  ml_models:
 
 networks:
   default:

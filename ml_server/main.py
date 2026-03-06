@@ -6,16 +6,17 @@ Integrates Redis feature store, Kafka events, SHAP explainability.
 import json
 import os
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from model_loader import load_model_artifacts, list_available_models
-from redis_store import get_features, set_features
+from redis_store import get_features, set_features, set_training_progress, get_training_progress
 from train_runner import run_training
 
 # -----------------------------------------------------------------------------
@@ -94,7 +95,8 @@ def _compute_shap_top_features(model: Any, X: pd.DataFrame, feature_cols: list[s
         contrib = [(feature_cols[i], float(vals[i])) for i in range(len(feature_cols))]
         contrib.sort(key=lambda x: abs(x[1]), reverse=True)
         return [
-            {"name": n, "value": 0.0, "contribution": round(c, 4)}
+            # Keep both fields for compatibility across UI/analytics.
+            {"name": n, "value": round(c, 4), "contribution": round(c, 4)}
             for n, c in contrib[:top_k]
         ]
     except Exception as e:
@@ -123,6 +125,10 @@ class PredictRequest(BaseModel):
     userId: str | None = Field(None, alias="userId")
     model_id: str | None = Field(None, alias="modelId", description="Model to use (default: active)")
     features: dict[str, float] | None = Field(None, description="Pre-computed features (overrides Redis)")
+    telemetry: dict[str, float] | None = Field(
+        None,
+        description="Raw telemetry values (will be mapped into the model feature vector).",
+    )
 
     class Config:
         populate_by_name = True
@@ -143,6 +149,43 @@ def get_models() -> dict:
     models = list_available_models(MODELS_DIR)
     return {"success": True, "data": {"models": models}}
 
+@app.get("/models/active")
+def get_active_model() -> dict:
+    """Return the currently active model."""
+    try:
+        _, feature_cols, model_name = load_model_artifacts(MODELS_DIR)
+        return {"success": True, "data": {"activeModel": model_name, "feature_count": len(feature_cols)}}
+    except FileNotFoundError:
+        return {"success": True, "data": {"activeModel": None, "feature_count": 0}}
+
+
+class ChangeModelRequest(BaseModel):
+    model_id: str = Field(..., description="ID of the model to activate (e.g. 'xgboost')")
+
+@app.post("/models/active")
+def set_active_model(req: ChangeModelRequest):
+    """Switch the actively used predictive model."""
+    import shutil
+    import joblib
+    
+    model_id = req.model_id.lower()
+    source_model = MODELS_DIR / f"{model_id}.pkl"
+    
+    if not source_model.exists():
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found on disk.")
+        
+    # Copy the selected model to be the default 'trained_model.pkl'
+    shutil.copy(source_model, MODELS_DIR / "trained_model.pkl")
+    
+    name_display = model_id.title()
+    if model_id == "xgboost": name_display = "XGBoost"
+    elif model_id == "lightgbm": name_display = "LightGBM"
+    elif model_id == "randomforest": name_display = "RandomForest"
+    
+    joblib.dump(name_display, MODELS_DIR / "model_name.pkl")
+    
+    return {"success": True, "message": f"Active model changed to {name_display}"}
+
 
 @app.post("/predict")
 def predict(req: PredictRequest):
@@ -156,19 +199,31 @@ def predict(req: PredictRequest):
 
     # Load model
     try:
-        model, feature_cols, model_name = load_model_artifacts(MODELS_DIR)
+        model_id = (req.model_id or "").strip() or None
+        model, feature_cols, model_name = load_model_artifacts(MODELS_DIR, model_id=model_id)
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
     # Resolve features
     features = req.features
     if features is None:
-        features = get_features(inverter_id)
-        if features is None:
-            raise HTTPException(
-                status_code=400,
-                detail="No features provided and none found in Redis for inverter_id. Send 'features' dict or populate Redis first.",
-            )
+        if req.telemetry:
+            tel = {k: float(v) for k, v in req.telemetry.items() if v is not None}
+            voltage = tel.get("voltage") or tel.get("Voltage") or tel.get("ac_voltage")
+            current = tel.get("current") or tel.get("Current") or tel.get("ac_current")
+            if voltage is not None and current is not None:
+                tel.setdefault("power", float(voltage) * float(current))
+            temperature = tel.get("temperature") or tel.get("Temperature")
+            if temperature is not None:
+                tel.setdefault("temperature_avg", float(temperature))
+            features = tel
+        else:
+            features = get_features(inverter_id)
+            if features is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No features/telemetry provided and none found in Redis for inverter_id. Send 'features' or 'telemetry', or populate Redis first.",
+                )
 
     # Build feature vector (fill missing with 0)
     row = {c: float(features.get(c, 0)) for c in feature_cols}
@@ -182,8 +237,10 @@ def predict(req: PredictRequest):
     top_features = _compute_shap_top_features(model, X, feature_cols, top_k=5)
 
     model_output = {"risk_score": risk_score, "inverter_id": inverter_id, "model": model_name or "unknown"}
+    request_id = str(uuid.uuid4())
 
     payload = {
+        "requestId": request_id,
         "inverterId": inverter_id,
         "riskScore": risk_pct,
         "modelOutput": model_output,
@@ -196,6 +253,7 @@ def predict(req: PredictRequest):
     set_features(inverter_id, features)
 
     return {
+        "request_id": request_id,
         "risk_score": risk_pct,
         "inverter_id": inverter_id,
         "top_features": top_features,
@@ -204,8 +262,51 @@ def predict(req: PredictRequest):
     }
 
 
+@app.get("/train/progress")
+def get_train_progress() -> dict:
+    """Return the current ML training pipeline status."""
+    return {"success": True, "data": get_training_progress()}
+
+
+def _run_training_background(dataset_path: Path, model_type: str | None, is_temp_file: bool):
+    """Background task to execute training pipeline and emit events."""
+    try:
+        def progress_tracker(progress: int, message: str):
+            set_training_progress("running", progress, message)
+            
+        result = run_training(
+            dataset_path=dataset_path,
+            models_dir=MODELS_DIR,
+            plots_dir=MODELS_DIR.parent / "plots",
+            model_type=model_type,
+            progress_callback=progress_tracker
+        )
+        
+        event = {
+            "event": "model_trained",
+            "best_model": result.get("best_model"),
+            "feature_count": result.get("feature_count"),
+            "metrics": result.get("metrics", []),
+        }
+        _publish_training_event(event)
+
+        # Signal completion with the result data
+        set_training_progress("completed", 100, f"Training complete! Best model: {result.get('best_model')}", result=result)
+
+    except Exception as e:
+        print(f"Background training failed: {e}")
+        set_training_progress("error", 0, f"Training failed: {e}")
+    finally:
+        if is_temp_file and dataset_path.exists():
+            try:
+                dataset_path.unlink()
+            except Exception:
+                pass
+
+
 @app.post("/train")
 async def train(
+    background_tasks: BackgroundTasks,
     model_type: str | None = Query(None, description="XGBoost | LightGBM | RandomForest"),
     file: UploadFile | None = File(None),
 ):
@@ -228,25 +329,19 @@ async def train(
         )
 
     try:
-        result = run_training(
+        # Immediately set status to Started
+        set_training_progress("running", 0, "Initiating training pipeline...")
+        background_tasks.add_task(
+            _run_training_background,
             dataset_path=dataset_path,
-            models_dir=MODELS_DIR,
-            plots_dir=MODELS_DIR.parent / "plots",
+            model_type=model_type,
+            is_temp_file=(dataset_path != DEFAULT_DATASET),
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return {
+            "success": True, 
+            "message": "Training started in the background. Poll /train/progress for status.",
+            "data": {"status": "started"}
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Training failed: {e}")
-    finally:
-        if file and file.filename and dataset_path != DEFAULT_DATASET and dataset_path.exists():
-            dataset_path.unlink(missing_ok=True)
-
-    event = {
-        "event": "model_trained",
-        "best_model": result.get("best_model"),
-        "feature_count": result.get("feature_count"),
-        "metrics": result.get("metrics", []),
-    }
-    _publish_training_event(event)
-
-    return {"success": True, "data": result}
+        set_training_progress("error", 0, str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to initiate training: {e}")

@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import InverterDetail from './pages/InverterDetail';
 import QnA from './pages/QnA';
 import Settings from './pages/Settings';
+import AdminDashboard from './pages/AdminDashboard';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 
@@ -72,6 +73,12 @@ function AppRoutes() {
       <Route path="/settings" element={
         <ProtectedRoute>
           <MainLayout><Settings /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/admin" element={
+        <ProtectedRoute>
+          <MainLayout><AdminDashboard /></MainLayout>
         </ProtectedRoute>
       } />
 

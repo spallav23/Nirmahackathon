@@ -19,6 +19,11 @@ module.exports = {
   emailVerificationExpiresMinutes: parseInt(process.env.EMAIL_VERIFICATION_EXPIRES_MINUTES, 10) || 60 * 24, // 24h
   resetPasswordExpiresMinutes: parseInt(process.env.RESET_PASSWORD_EXPIRES_MINUTES, 10) || 60, // 1h
   googleApiKey: process.env.GOOGLE_API_KEY || '',
+  // default should follow the API naming convention; users can override via
+  // environment variable (e.g. "gemini-2.5-flash" or
+  // "models/gemini-2.5-flash").
+  googleGeminiModel: process.env.GOOGLE_GEMINI_MODEL || 'gemini-2.5-flash',
   kafkaBrokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(',').map((b) => b.trim()),
   kafkaTopicPredictions: process.env.KAFKA_TOPIC_PREDICTIONS || 'prediction_events',
+  kafkaTopicEmails: process.env.KAFKA_TOPIC_EMAILS || 'email_events',
 };

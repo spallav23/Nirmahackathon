@@ -4,7 +4,7 @@ import {
     ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
     BarChart, Bar
 } from 'recharts';
-import { getHistory } from '../services/api';
+import { getAnalytics } from '../services/api';
 
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
@@ -18,50 +18,27 @@ const Dashboard = () => {
 
     const fetchData = async () => {
         try {
-            const res = await getHistory();
+            const res = await getAnalytics();
             if (res.data.success) {
-                const history = res.data.data.history || [];
+                const data = res.data.data;
 
-                // Calculate Stats
-                let total = history.length;
-                let highRisk = 0;
-                let mediumRisk = 0;
-
-                const factorsMap = {};
-                const trendMap = {};
-
-                history.forEach(item => {
-                    if (item.riskScore >= 70) highRisk++;
-                    else if (item.riskScore >= 40) mediumRisk++;
-
-                    // Aggregate Factors
-                    if (item.topFeatures) {
-                        item.topFeatures.forEach(f => {
-                            if (!factorsMap[f.name]) factorsMap[f.name] = 0;
-                            factorsMap[f.name] += f.value;
-                        });
-                    }
-
-                    // Mock Trend Grouping (By Day created)
-                    const date = new Date(item.createdAt).toLocaleDateString();
-                    if (!trendMap[date]) trendMap[date] = [];
-                    trendMap[date].push(item.riskScore);
+                // Update Stats
+                setStats({
+                    total: data.totalPredictions || 0,
+                    highRisk: data.riskDistribution?.highRisk || 0,
+                    mediumRisk: data.riskDistribution?.mediumRisk || 0
                 });
 
-                setStats({ total, highRisk, mediumRisk });
-
-                // Format Factors for chart
-                const formattedFactors = Object.keys(factorsMap).map(k => ({
-                    name: k, value: Math.round(factorsMap[k] * 100) / 100
-                })).sort((a, b) => b.value - a.value).slice(0, 5); // top 5
+                // Format Factors for chart (backend groups by name & totalContribution)
+                const formattedFactors = (data.topFactors || []).map(f => ({
+                    name: f.name, value: f.totalContribution
+                }));
                 setFailureFactors(formattedFactors);
 
-                // Format Trends for chart
-                const formattedTrends = Object.keys(trendMap).map(date => {
-                    const avgRisk = trendMap[date].reduce((a, b) => a + b, 0) / trendMap[date].length;
-                    return { name: date, risk: Math.round(avgRisk) };
-                }).slice(-7); // last 7 days
-
+                // Format Trends for chart (backend returns date & avgRisk)
+                const formattedTrends = (data.timeSeries || []).map(t => ({
+                    name: t.date, risk: t.avgRisk
+                }));
                 setTrendData(formattedTrends);
             }
         } catch (err) {

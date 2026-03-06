@@ -40,3 +40,36 @@ def set_features(inverter_id: str, features: dict[str, float], ttl_sec: int = 86
         return True
     except Exception:
         return False
+
+
+def set_training_progress(status: str, progress: int, message: str, result: dict[str, Any] | None = None) -> bool:
+    """Store the current status of the ML training pipeline."""
+    client = _get_client()
+    if not client:
+        return False
+    try:
+        data = {
+            "status": status,
+            "progress": progress,
+            "message": message,
+        }
+        if result is not None:
+            data["result"] = result
+            
+        client.setex("ml:training:status", 3600, json.dumps(data)) # Expire after 1 hour
+        return True
+    except Exception:
+        return False
+
+
+def get_training_progress() -> dict[str, Any]:
+    """Retrieve the current ML training pipeline status."""
+    client = _get_client()
+    default_state = {"status": "idle", "progress": 0, "message": "Ready"}
+    if not client:
+        return default_state
+    try:
+        data = client.get("ml:training:status")
+        return json.loads(data) if data else default_state
+    except Exception:
+        return default_state

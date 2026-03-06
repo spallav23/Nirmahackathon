@@ -14,5 +14,6 @@ const summaryValidation = [
 ];
 
 router.post('/', protect, validate(summaryValidation), summaryController.postSummary);
+router.post('/chat', protect, summaryController.postChat);
 
 module.exports = router;

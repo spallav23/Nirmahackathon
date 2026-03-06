@@ -1,18 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { runPrediction, getAISummary } from '../services/api';
+import { runPrediction, getAISummary, getModels } from '../services/api';
 
 const InverterDetail = () => {
     const [telemetry, setTelemetry] = useState({
         temperature: '',
         voltage: '',
-        current: ''
+        current: '',
+        alarmFrequency: '',
+        powerRatio: ''
     });
 
     const [prediction, setPrediction] = useState(null);
     const [summary, setSummary] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [models, setModels] = useState([]);
+    const [selectedModelId, setSelectedModelId] = useState('');
+
+    useEffect(() => {
+        const loadModels = async () => {
+            try {
+                const res = await getModels();
+                if (res.data.success) {
+                    const list = res.data.data.models || [];
+                    setModels(list);
+                    const active = list.find(m => m.active);
+                    if (active) setSelectedModelId(active.id);
+                }
+            } catch (err) {
+                console.error('Failed to load models for prediction page', err);
+            }
+        };
+        loadModels();
+    }, []);
 
     const handleInputChange = (e) => {
         setTelemetry({ ...telemetry, [e.target.name]: e.target.value });
@@ -29,10 +50,13 @@ const InverterDetail = () => {
             // 1. Run ML Prediction
             const predRes = await runPrediction({
                 inverterId: 'INV-204',
+                modelId: selectedModelId || undefined,
                 telemetry: {
                     temperature: Number(telemetry.temperature),
                     voltage: Number(telemetry.voltage),
-                    current: Number(telemetry.current)
+                    current: Number(telemetry.current),
+                    alarm_frequency: telemetry.alarmFrequency ? Number(telemetry.alarmFrequency) : undefined,
+                    power_ratio: telemetry.powerRatio ? Number(telemetry.powerRatio) : undefined
                 }
             });
 
@@ -94,6 +118,29 @@ const InverterDetail = () => {
                 <div className="card">
                     <h3 style={{ marginBottom: '1.5rem', color: 'var(--accent-secondary)' }}>Submit Telemetry for Prediction</h3>
                     <form onSubmit={handlePredict} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {models.length > 0 && (
+                            <div>
+                                <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Model to use</label>
+                                <select
+                                    value={selectedModelId}
+                                    onChange={(e) => setSelectedModelId(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.8rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid var(--border-color)',
+                                        backgroundColor: 'var(--bg-sub-surface)',
+                                        color: 'var(--text-primary)'
+                                    }}
+                                >
+                                    {models.map(m => (
+                                        <option key={m.id} value={m.id}>
+                                            {m.name} {m.active ? '(Active default)' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         <div>
                             <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Temperature (°C)</label>
                             <input
@@ -112,6 +159,20 @@ const InverterDetail = () => {
                             <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Current (A)</label>
                             <input
                                 type="number" step="0.1" name="current" value={telemetry.current} onChange={handleInputChange} required placeholder="e.g. 15.4"
+                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Alarm Frequency (last 7 days)</label>
+                            <input
+                                type="number" step="1" min="0" name="alarmFrequency" value={telemetry.alarmFrequency} onChange={handleInputChange} placeholder="e.g. 3"
+                                style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Power Ratio</label>
+                            <input
+                                type="number" step="0.01" min="0" max="2" name="powerRatio" value={telemetry.powerRatio} onChange={handleInputChange} placeholder="e.g. 0.92"
                                 style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
                             />
                         </div>
