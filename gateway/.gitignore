@@ -1,0 +1,10 @@
+# Local overrides
+*.local.conf
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea
+.vscode
+.DS_Store

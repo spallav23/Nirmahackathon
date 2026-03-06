@@ -1,0 +1,10 @@
+# Data and dumps (do not commit)
+data/
+*.bson
+*.json
+dump/
+
+# IDE / OS
+.idea
+.vscode
+.DS_Store

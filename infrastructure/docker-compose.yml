@@ -1,0 +1,265 @@
+# AI-Driven Solar Inverter Failure Prediction & Intelligence Platform
+# Main orchestration file - all services support horizontal scaling
+
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../Frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      replicas: 1
+
+  # ---------------------------------------------------------------------------
+  # NGINX API Gateway + Load Balancer
+  # ---------------------------------------------------------------------------
+  gateway:
+    build:
+      context: ../gateway
+      dockerfile: Dockerfile
+    container_name: gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      main-server:
+        condition: service_healthy
+      ml-server:
+        condition: service_healthy
+      llm-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      replicas: 1
+
+  # ---------------------------------------------------------------------------
+  # Main Backend Server (Node.js + Express)
+  # ---------------------------------------------------------------------------
+  main-server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: main-server
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongodb:27017/inverter_platform
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      replicas: 1
+
+  # ---------------------------------------------------------------------------
+  # ML Prediction Server (Python + FastAPI)
+  # ---------------------------------------------------------------------------
+  ml-server:
+    build:
+      context: ../ml_server
+      dockerfile: Dockerfile
+    container_name: ml-server
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://redis:6379
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      replicas: 1
+
+  # ---------------------------------------------------------------------------
+  # LLM Service (RAG + Gemini)
+  # ---------------------------------------------------------------------------
+  llm-service:
+    build:
+      context: ../llm_service
+      dockerfile: Dockerfile
+    container_name: llm-service
+    restart: unless-stopped
+    environment:
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      replicas: 1
+
+  # ---------------------------------------------------------------------------
+  # SMTP Notification Service
+  # ---------------------------------------------------------------------------
+  notification-service:
+    build:
+      context: ../smtp_server
+      dockerfile: Dockerfile
+    container_name: notification-service
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKERS: kafka:9092
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+    depends_on:
+      kafka:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      replicas: 1
+
+  # ---------------------------------------------------------------------------
+  # Redis Feature Store
+  # ---------------------------------------------------------------------------
+  redis:
+    build:
+      context: ../redis
+      dockerfile: Dockerfile
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    deploy:
+      replicas: 1
+
+  # ---------------------------------------------------------------------------
+  # MongoDB (centralized database)
+  # ---------------------------------------------------------------------------
+  mongodb:
+    build:
+      context: ../database
+      dockerfile: Dockerfile
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin}
+      MONGO_INITDB_DATABASE: inverter_platform
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      replicas: 1
+
+  # ---------------------------------------------------------------------------
+  # Apache Kafka Event Bus
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    container_name: zookeeper
+    restart: unless-stopped
+    environment:
+      ALLOW_ANONYMOUS_LOGIN: "yes"
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/bitnami/zookeeper
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  kafka:
+    build:
+      context: ../kafka
+      dockerfile: Dockerfile
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,EXTERNAL://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9093
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+
+volumes:
+  mongodb_data:
+  zookeeper_data:
+
+networks:
+  default:
+    name: inverter-platform-network

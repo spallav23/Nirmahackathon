@@ -1,0 +1,11 @@
+# Data and logs
+logs/
+data/
+
+# Config overrides (if any)
+*.local.properties
+
+# IDE / OS
+.idea
+.vscode
+.DS_Store
