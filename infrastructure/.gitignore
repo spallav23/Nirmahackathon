@@ -1,0 +1,14 @@
+# Local overrides
+.env
+.env.local
+*.local.yml
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
