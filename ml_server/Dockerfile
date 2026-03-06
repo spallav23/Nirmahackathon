@@ -1,16 +1,20 @@
-# ML Prediction Server (Python + FastAPI)
-# Use AWS Public ECR mirror to avoid Docker Hub timeouts
+# ML Prediction Server - AI-Driven Solar Inverter Failure Prediction
+# Supports XGBoost, LightGBM, RandomForest; SHAP explainability; Redis; Kafka
 FROM public.ecr.aws/docker/library/python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements*.txt ./
-RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || pip install --no-cache-dir fastapi uvicorn redis kafka-python pydantic
+# Install curl for healthcheck and system deps
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install curl for container-level healthcheck
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Run tests before image creation (per base prompt)
+RUN pytest tests/ -v --tb=short
 
 EXPOSE 8000
 

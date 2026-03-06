@@ -3,26 +3,6 @@
 
 services:
   # ---------------------------------------------------------------------------
-  # Frontend
-  # ---------------------------------------------------------------------------
-  frontend:
-    build:
-      context: ../Frontend
-      dockerfile: Dockerfile
-    container_name: frontend
-    restart: unless-stopped
-    ports:
-      - "3000:80"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    deploy:
-      replicas: 1
-
-  # ---------------------------------------------------------------------------
   # NGINX API Gateway + Load Balancer
   # ---------------------------------------------------------------------------
   gateway:
@@ -35,13 +15,9 @@ services:
       - "80:80"
       - "443:443"
     depends_on:
-      frontend:
-        condition: service_healthy
       main-server:
         condition: service_healthy
-      ml-server:
-        condition: service_healthy
-      # llm-service:
+      # ml-server:
       #   condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
@@ -88,50 +64,26 @@ services:
   # ---------------------------------------------------------------------------
   # ML Prediction Server (Python + FastAPI)
   # ---------------------------------------------------------------------------
-  ml-server:
-    build:
-      context: ../ml_server
-      dockerfile: Dockerfile
-    container_name: ml-server
-    restart: unless-stopped
-    environment:
-      REDIS_URL: redis://redis:6379
-      KAFKA_BROKERS: kafka:9092
-    depends_on:
-      redis:
-        condition: service_healthy
-      kafka:
-        condition: service_started
-    # healthcheck:
-    #   test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-    #   interval: 20s
-    #   timeout: 5s
-    #   retries: 3
-    #   start_period: 20s
-    deploy:
-      replicas: 1
-
-  # ---------------------------------------------------------------------------
-  # LLM Service (RAG + Gemini)
-  # ---------------------------------------------------------------------------
-  # llm-service:
+  # ml-server:
   #   build:
-  #     context: ../llm_service
+  #     context: ../ml_server
   #     dockerfile: Dockerfile
-  #   container_name: llm-service
+  #   container_name: ml-server
   #   restart: unless-stopped
   #   environment:
-  #     GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+  #     REDIS_URL: redis://redis:6379
   #     KAFKA_BROKERS: kafka:9092
   #   depends_on:
+  #     redis:
+  #       condition: service_healthy
   #     kafka:
   #       condition: service_started
   #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
   #     interval: 20s
   #     timeout: 5s
   #     retries: 3
-  #     start_period: 15s
+  #     start_period: 20s
   #   deploy:
   #     replicas: 1
 
@@ -198,8 +150,6 @@ services:
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-admin}
       MONGO_INITDB_DATABASE: inverter_platform
     volumes:
       - mongodb_data:/data/db
