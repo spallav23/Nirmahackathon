@@ -2,9 +2,7 @@
 # Main orchestration file - all services support horizontal scaling
 
 services:
-  # ---------------------------------------------------------------------------
-  # NGINX API Gateway + Load Balancer
-  # ---------------------------------------------------------------------------
+
   gateway:
     build:
       context: ../gateway
@@ -28,9 +26,7 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # Main Backend Server (Node.js + Express)
-  # ---------------------------------------------------------------------------
+
   main-server:
     build:
       context: ../server
@@ -49,9 +45,11 @@ services:
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-spp23102003@gmail.com}
+      SMTP_PASS: ${SMTP_PASS:-rcdn jatz eoma egcx}
+      SMTP_FROM: ${SMTP_FROM:-spp23102003@gmail.com}
+    ports:
+      - "3000:3001"
     depends_on:
       mongodb:
         condition: service_healthy
@@ -70,9 +68,7 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # ML Prediction Server (Python + FastAPI)
-  # ---------------------------------------------------------------------------
+
   ml-server:
     build:
       context: ../ml_server
@@ -102,9 +98,6 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # SMTP Notification Service
-  # ---------------------------------------------------------------------------
   notification-service:
     build:
       context: ../smtp_server
@@ -113,13 +106,13 @@ services:
     restart: unless-stopped
     environment:
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
-      KAFKA_TOPIC_NOTIFICATIONS: ${KAFKA_TOPIC_NOTIFICATIONS:-notification_events}
+      KAFKA_TOPIC_EMAILS: ${KAFKA_TOPIC_EMAILS:-email_events}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-spp23102003@gmail.com}
+      SMTP_PASS: ${SMTP_PASS:-rcdn jatz eoma egcx}
+      SMTP_FROM: ${SMTP_FROM:-spp23102003@gmail.com}
       ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
     depends_on:
       kafka:
@@ -133,9 +126,6 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # Redis Feature Store
-  # ---------------------------------------------------------------------------
   redis:
     build:
       context: ../redis
@@ -155,9 +145,6 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # MongoDB (centralized database)
-  # ---------------------------------------------------------------------------
   mongodb:
     build:
       context: ../database
@@ -179,9 +166,6 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # Apache Kafka Event Bus
-  # ---------------------------------------------------------------------------
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper

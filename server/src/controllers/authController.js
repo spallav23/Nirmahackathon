@@ -41,26 +41,26 @@ async function login(req, res, next) {
     const { email, password } = req.body;
 
     // Static Admin User Bypass
-    if (email === 'admin@gmail.com' && password === '12345678') {
-      const adminId = '000000000000000000000000'; // Mocked ObjectId
-      const accessToken = signAccessToken({ userId: adminId });
-      const refreshToken = signRefreshToken({ userId: adminId });
-      return res.json({
-        success: true,
-        data: {
-          user: {
-            _id: adminId,
-            name: 'System Admin',
-            email: 'admin',
-            role: 'admin',
-            isEmailVerified: true
-          },
-          accessToken,
-          refreshToken,
-          expiresIn: '7d',
-        },
-      });
-    }
+    // if (email === 'admin@gmail.com' && password === '12345678') {
+    //   const adminId = '000000000000000000000000'; // Mocked ObjectId
+    //   const accessToken = signAccessToken({ userId: adminId });
+    //   const refreshToken = signRefreshToken({ userId: adminId });
+    //   return res.json({
+    //     success: true,
+    //     data: {
+    //       user: {
+    //         _id: adminId,
+    //         name: 'System Admin',
+    //         email: 'admin',
+    //         role: 'admin',
+    //         isEmailVerified: true
+    //       },
+    //       accessToken,
+    //       refreshToken,
+    //       expiresIn: '7d',
+    //     },
+    //   });
+    // }
 
     const user = await User.findOne({ email }).select('+password');
     if (!user) {

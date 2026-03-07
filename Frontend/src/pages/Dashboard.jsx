@@ -4,13 +4,14 @@ import {
     ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
     BarChart, Bar
 } from 'recharts';
-import { getAnalytics } from '../services/api';
+import { getAnalytics, getDatasetSummary } from '../services/api';
 
 const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({ total: 0, highRisk: 0, mediumRisk: 0 });
     const [trendData, setTrendData] = useState([]);
     const [failureFactors, setFailureFactors] = useState([]);
+    const [datasetSummary, setDatasetSummary] = useState([]);
 
     useEffect(() => {
         fetchData();
@@ -41,6 +42,11 @@ const Dashboard = () => {
                 }));
                 setTrendData(formattedTrends);
             }
+
+            const summaryRes = await getDatasetSummary();
+            if (summaryRes.data.success) {
+                setDatasetSummary(summaryRes.data.data);
+            }
         } catch (err) {
             console.error("Failed to load dashboard data", err);
         }
@@ -70,6 +76,36 @@ const Dashboard = () => {
                 <div className="card animate-fade-in" style={{ borderLeft: '4px solid var(--status-medium-risk)', animationDelay: '0.3s' }}>
                     <h3 style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>Medium Risk</h3>
                     <p style={{ fontSize: '2.5rem', fontWeight: 'bold', marginTop: '0.5rem', color: 'var(--status-medium-risk)' }}>{stats.mediumRisk}</p>
+                </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                <div className="card animate-fade-in" style={{ animationDelay: '0.4s' }}>
+                    <h3 style={{ marginBottom: '1.5rem' }}>Global Inverter Power & Energy Trends</h3>
+                    {loading && datasetSummary.length === 0 ? (
+                        <div className="skeleton" style={{ width: '100%', height: '300px' }}></div>
+                    ) : datasetSummary.length === 0 ? (
+                        <div style={{ width: '100%', height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                            No global dataset summary available.
+                        </div>
+                    ) : (
+                        <div style={{ width: '100%', height: 300 }}>
+                            <ResponsiveContainer>
+                                <AreaChart data={datasetSummary} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" vertical={false} />
+                                    <XAxis dataKey="date" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                                    <YAxis yAxisId="left" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                                    <YAxis yAxisId="right" orientation="right" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: 'var(--bg-surface)', borderColor: 'var(--border-color)', borderRadius: '8px' }}
+                                        itemStyle={{ color: 'var(--text-primary)' }}
+                                    />
+                                    <Area yAxisId="left" type="monotone" name="Total Power" dataKey="total_power" stroke="var(--accent-primary)" fillOpacity={0.2} fill="var(--accent-primary)" />
+                                    <Area yAxisId="right" type="monotone" name="Total Energy" dataKey="total_energy" stroke="var(--status-medium-risk)" fillOpacity={0.2} fill="var(--status-medium-risk)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    )}
                 </div>
             </div>
 

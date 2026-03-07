@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { getProfile, updateProfile, resendVerification, verifyEmailDev, getModels, setActiveModel } from '../services/api';
+import { getProfile, updateProfile, resendVerification, verifyEmailDev, getModels, setActiveModel, generateApiKey, getApiKey, revokeApiKey } from '../services/api';
 
 const Settings = () => {
     const { user } = useAuth();
@@ -18,6 +18,12 @@ const Settings = () => {
     const [mlModels, setMlModels] = useState([]);
     const [mlLoading, setMlLoading] = useState(false);
     const [mlMessage, setMlMessage] = useState({ text: '', type: '' });
+
+    // API Key State
+    const [maskedKey, setMaskedKey] = useState(null);
+    const [newKeyReveal, setNewKeyReveal] = useState(null);
+    const [apiKeyLoading, setApiKeyLoading] = useState(false);
+    const [apiKeyMessage, setApiKeyMessage] = useState({ text: '', type: '' });
 
     useEffect(() => {
         fetchData();
@@ -42,6 +48,12 @@ const Settings = () => {
             if (modelRes.data.success) {
                 setMlModels(modelRes.data.data.models || []);
             }
+
+            // Fetch masked API key
+            try {
+                const keyRes = await getApiKey();
+                if (keyRes.data.success) setMaskedKey(keyRes.data.data.apiKey);
+            } catch (_) { }
         } catch (err) {
             console.error(err);
             setMessage({ text: 'Failed to load settings data. Backend server might not be running.', type: 'error' });
@@ -126,6 +138,44 @@ const Settings = () => {
             setMlMessage({ text: 'Failed to update ML model. Is the Python server running?', type: 'error' });
         }
         setMlLoading(false);
+    };
+
+    const handleGenerateKey = async () => {
+        if (maskedKey && !window.confirm('This will revoke your existing key. Continue?')) return;
+        setApiKeyLoading(true);
+        setApiKeyMessage({ text: '', type: '' });
+        setNewKeyReveal(null);
+        try {
+            const res = await generateApiKey();
+            if (res.data.success) {
+                setNewKeyReveal(res.data.data.apiKey);
+                setMaskedKey(res.data.data.apiKey.substring(0, 8) + '••••••••••••••••••••' + res.data.data.apiKey.slice(-4));
+                setApiKeyMessage({ text: 'New API key generated! Copy it now — it will not be shown again.', type: 'success' });
+            }
+        } catch (err) {
+            setApiKeyMessage({ text: err.response?.data?.message || 'Failed to generate key.', type: 'error' });
+        }
+        setApiKeyLoading(false);
+    };
+
+    const handleRevokeKey = async () => {
+        if (!window.confirm('Revoke your API key? Any integrations using it will stop working.')) return;
+        setApiKeyLoading(true);
+        try {
+            await revokeApiKey();
+            setMaskedKey(null);
+            setNewKeyReveal(null);
+            setApiKeyMessage({ text: 'API key revoked.', type: 'success' });
+        } catch (err) {
+            setApiKeyMessage({ text: 'Failed to revoke key.', type: 'error' });
+        }
+        setApiKeyLoading(false);
+    };
+
+    const copyToClipboard = (text) => {
+        navigator.clipboard.writeText(text);
+        setApiKeyMessage({ text: 'Copied to clipboard!', type: 'success' });
+        setTimeout(() => setApiKeyMessage({ text: '', type: '' }), 2000);
     };
 
     if (loading) return <div style={{ padding: '2rem' }}>Loading settings...</div>;
@@ -276,6 +326,94 @@ const Settings = () => {
                     </div>
                 </div>
 
+            </div>
+
+            {/* API Key Management Card — full width below */}
+            <div className="card" style={{ marginTop: '2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                        <h3 style={{ color: 'var(--accent-primary)', margin: 0 }}>API Key</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.4rem' }}>
+                            Use this key to push telemetry directly from your systems or IoT devices. Requires email verification.
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <button
+                            onClick={handleGenerateKey}
+                            disabled={apiKeyLoading || !isEmailVerified}
+                            title={!isEmailVerified ? 'Verify email first' : ''}
+                            style={{
+                                padding: '0.6rem 1.2rem', backgroundColor: 'var(--accent-primary)', color: '#000',
+                                fontWeight: 'bold', borderRadius: '8px', border: 'none',
+                                cursor: apiKeyLoading || !isEmailVerified ? 'not-allowed' : 'pointer',
+                                opacity: apiKeyLoading || !isEmailVerified ? 0.5 : 1
+                            }}
+                        >
+                            {maskedKey ? 'Regenerate' : 'Generate Key'}
+                        </button>
+                        {maskedKey && (
+                            <button
+                                onClick={handleRevokeKey}
+                                disabled={apiKeyLoading}
+                                style={{
+                                    padding: '0.6rem 1.2rem', backgroundColor: 'transparent',
+                                    color: 'var(--status-high-risk)', fontWeight: 'bold', borderRadius: '8px',
+                                    border: '1px solid var(--status-high-risk)', cursor: 'pointer'
+                                }}
+                            >
+                                Revoke
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {apiKeyMessage.text && (
+                    <div style={{
+                        padding: '0.75rem 1rem', marginBottom: '1rem', borderRadius: '8px',
+                        backgroundColor: apiKeyMessage.type === 'success' ? 'rgba(0, 230, 118, 0.1)' : 'rgba(255, 76, 76, 0.1)',
+                        color: apiKeyMessage.type === 'success' ? 'var(--status-low-risk)' : 'var(--status-high-risk)',
+                        fontSize: '0.9rem'
+                    }}>
+                        {apiKeyMessage.text}
+                    </div>
+                )}
+
+                {!isEmailVerified && (
+                    <div style={{ padding: '0.75rem 1rem', borderRadius: '8px', backgroundColor: 'rgba(255, 165, 0, 0.1)', color: 'var(--status-medium-risk)', fontSize: '0.9rem' }}>
+                        ⚠ Please verify your email address to generate or use an API key.
+                    </div>
+                )}
+
+                {newKeyReveal && (
+                    <div style={{ padding: '1rem', borderRadius: '8px', backgroundColor: 'var(--bg-main)', border: '1px solid var(--accent-primary)', marginTop: '0.5rem' }}>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--status-medium-risk)', marginBottom: '0.5rem' }}>
+                            ⚠ Copy this key now — it will not be shown again!
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <code style={{ flex: 1, padding: '0.6rem', backgroundColor: 'var(--bg-surface)', borderRadius: '6px', fontSize: '0.85rem', color: 'var(--text-primary)', wordBreak: 'break-all', overflowX: 'auto' }}>
+                                {newKeyReveal}
+                            </code>
+                            <button
+                                onClick={() => copyToClipboard(newKeyReveal)}
+                                style={{ padding: '0.6rem 1rem', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            >
+                                Copy
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {maskedKey && !newKeyReveal && (
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.5rem' }}>
+                        <code style={{ flex: 1, padding: '0.6rem', backgroundColor: 'var(--bg-main)', borderRadius: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+                            {maskedKey}
+                        </code>
+                    </div>
+                )}
+
+                {!maskedKey && !newKeyReveal && isEmailVerified && (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>No API key generated yet. Click "Generate Key" to create one.</p>
+                )}
             </div>
         </motion.div>
     );

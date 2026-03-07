@@ -56,4 +56,27 @@ function requireRoles(...roles) {
   };
 }
 
-module.exports = { protect, optionalAuth, requireRoles };
+/**
+ * API Key Auth - authenticate users via x-api-key header
+ */
+async function apiKeyAuth(req, res, next) {
+  try {
+    const key = req.headers['x-api-key'];
+    if (!key) {
+      return res.status(401).json({ success: false, message: 'API key missing. Provide x-api-key header.' });
+    }
+    const user = await User.findOne({ apiKey: key }).select('+apiKey');
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid API key.' });
+    }
+    if (!user.isEmailVerified) {
+      return res.status(403).json({ success: false, message: 'Email verification required to use this API key.' });
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { protect, optionalAuth, requireRoles, apiKeyAuth };

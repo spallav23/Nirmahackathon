@@ -38,6 +38,7 @@ const userSchema = new mongoose.Schema(
     },
     phone: { type: String, trim: true, default: '' },
     avatar: { type: String, trim: true, default: '' },
+    apiKey: { type: String, unique: true, sparse: true, select: false },
   },
   {
     timestamps: true,

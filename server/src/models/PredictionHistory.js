@@ -10,6 +10,7 @@ const predictionHistorySchema = new mongoose.Schema(
     topFeatures: [{ type: mongoose.Schema.Types.Mixed }],
     summary: { type: String, default: '' },
     rawPayload: { type: mongoose.Schema.Types.Mixed },
+    source: { type: String, enum: ['web', 'api'], default: 'web', index: true },
   },
   { timestamps: true }
 );
