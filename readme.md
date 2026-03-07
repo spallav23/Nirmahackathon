@@ -227,3 +227,36 @@ Each service folder has its own **Dockerfile**, **.gitignore**, and **readme.md*
 - **Gateway not responding:** Ensure gateway, frontend, main-server, and ml-server are healthy: `docker compose -f infrastructure/docker-compose.yml ps`
 - **401 on /api/profile or /history:** Use the token from login in the header: `Authorization: Bearer <accessToken>`
 - **History empty after ML predict:** Main server must be connected to Kafka and consuming `prediction_events`; check main-server logs. Ensure ML predict request includes `userId` if you want the record tied to the current user.
+
+
+TEAM DEATIALS 
+
+Name :- Diyanshi Patel
+Phone Number :- 8799453421
+Email :- 25mce019@nirmauni.ac.in
+Collage Name :- Nirma University
+Year of graduation :- 2027
+
+Name :- Ishika Vindrani
+Phone Number :- 8849149560
+Email :- 25mce029@nirmauni.ac.in
+Collage Name :- Nirma University
+Year of graduation :- 2027
+
+Name :- Mandeep chauhan
+Phone Number :- 9316338236
+Email :- 25mce003@nirmauni.ac.in
+Collage Name :- Nirma University
+Year of graduation :- 2027
+
+Name :- Vraj Prajapati
+Phone Number :- 8140229845
+Email :- 25mce020@nirmauni.ac.in
+Collage Name :- Nirma University
+Year of graduation :- 2027
+
+Name :- Pallav Shah
+Phone Number :- 9978359504
+Email :- 25mce025@nirmauni.ac.in
+Collage Name :- Nirma University
+Year of graduation :- 2027
