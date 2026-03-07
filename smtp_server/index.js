@@ -118,10 +118,6 @@ async function runConsumer() {
     setTimeout(runConsumer, 10000);
   }
 }
-
-// ---------------------------------------------------------------------------
-// HTTP server & health
-// ---------------------------------------------------------------------------
 app.use(express.json());
 
 app.get('/health', (req, res) => {
@@ -133,7 +129,7 @@ const server = app.listen(PORT, () => {
   runConsumer();
 });
 
-// Graceful shutdown
+
 process.on('SIGTERM', async () => {
   await consumer.disconnect();
   server.close();

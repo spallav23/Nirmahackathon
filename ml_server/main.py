@@ -354,6 +354,20 @@ def get_active_model() -> dict:
         return {"success": True, "data": {"activeModel": None, "feature_count": 0}}
 
 
+@app.get("/models/features")
+def get_model_features() -> dict:
+    """Return feature names required for prediction. Send these (especially recommended_primary) for best results."""
+    try:
+        _, feature_cols, _ = load_model_artifacts(MODELS_DIR)
+        base_cols = [c for c in feature_cols if not c.endswith("_rolling_mean") and not c.endswith("_diff")]
+        return {
+            "success": True,
+            "data": {"all": feature_cols, "recommended_primary": base_cols, "count": len(feature_cols)},
+        }
+    except FileNotFoundError:
+        raise HTTPException(status_code=503, detail="No trained model found. Run POST /train first.")
+
+
 class ChangeModelRequest(BaseModel):
     model_id: str = Field(..., description="ID of the model to activate (e.g. 'xgboost')")
 
@@ -399,29 +413,55 @@ def predict(req: PredictRequest):
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
 
-    # Resolve features
+    # Resolve features: merge base (Redis or dataset history) with request telemetry so all model features are filled
     features = req.features
-    if features is None:
+    base = None
+    if req.telemetry or req.features:
+        base = get_features(inverter_id)
+        if base is None and _json_history:
+            records = _json_history.get(str(inverter_id))
+            if records:
+                last_row = records[-1]
+                base = {}
+                for k, v in last_row.items():
+                    if k in ("datetime", "inverter_id"):
+                        continue
+                    try:
+                        base[k] = float(v) if v is not None else 0.0
+                    except (TypeError, ValueError):
+                        pass
+        if base is None:
+            base = {}
+        if req.features:
+            for k, v in req.features.items():
+                if v is not None:
+                    base[k] = float(v)
         if req.telemetry:
-            tel = {k: float(v) for k, v in req.telemetry.items() if v is not None}
-            voltage = tel.get("voltage") or tel.get("Voltage") or tel.get("ac_voltage")
-            current = tel.get("current") or tel.get("Current") or tel.get("ac_current")
-            if voltage is not None and current is not None:
-                tel.setdefault("power", float(voltage) * float(current))
-            temperature = tel.get("temperature") or tel.get("Temperature")
-            if temperature is not None:
-                tel.setdefault("temperature_avg", float(temperature))
-            features = tel
-        else:
-            features = get_features(inverter_id)
-            print(features)
-            if features is None:
-                raise HTTPException(
-                    status_code=400,
-                    detail="No features/telemetry provided and none found in Redis for inverter_id. Send 'features' or 'telemetry', or populate Redis first.",
-                )
+            for k, v in req.telemetry.items():
+                if v is not None:
+                    base[k] = float(v)
+        features = base
+    if features is None:
+        features = get_features(inverter_id)
+        if features is None and _json_history:
+            records = _json_history.get(str(inverter_id))
+            if records:
+                last_row = records[-1]
+                features = {}
+                for k, v in last_row.items():
+                    if k in ("datetime", "inverter_id"):
+                        continue
+                    try:
+                        features[k] = float(v) if v is not None else 0.0
+                    except (TypeError, ValueError):
+                        pass
+        if features is None:
+            raise HTTPException(
+                status_code=400,
+                detail="No features/telemetry provided and none found in Redis or dataset for this inverter_id. Send 'telemetry' or 'features' (see GET /models/features for recommended_primary keys).",
+            )
 
-    # Build feature vector (fill missing with 0)
+    # Build feature vector: use provided value or 0 for any missing column
     row = {c: float(features.get(c, 0)) for c in feature_cols}
     X = pd.DataFrame([row])[feature_cols]
 

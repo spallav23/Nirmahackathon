@@ -2,9 +2,7 @@
 # Main orchestration file - all services support horizontal scaling
 
 services:
-  # ---------------------------------------------------------------------------
-  # NGINX API Gateway + Load Balancer
-  # ---------------------------------------------------------------------------
+
   gateway:
     build:
       context: ../gateway
@@ -28,9 +26,7 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # Main Backend Server (Node.js + Express)
-  # ---------------------------------------------------------------------------
+
   main-server:
     build:
       context: ../server
@@ -72,9 +68,7 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # ML Prediction Server (Python + FastAPI)
-  # ---------------------------------------------------------------------------
+
   ml-server:
     build:
       context: ../ml_server
@@ -104,9 +98,6 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # SMTP Notification Service
-  # ---------------------------------------------------------------------------
   notification-service:
     build:
       context: ../smtp_server
@@ -135,9 +126,6 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # Redis Feature Store
-  # ---------------------------------------------------------------------------
   redis:
     build:
       context: ../redis
@@ -157,9 +145,6 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # MongoDB (centralized database)
-  # ---------------------------------------------------------------------------
   mongodb:
     build:
       context: ../database
@@ -181,9 +166,6 @@ services:
     deploy:
       replicas: 1
 
-  # ---------------------------------------------------------------------------
-  # Apache Kafka Event Bus
-  # ---------------------------------------------------------------------------
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper

@@ -5,6 +5,7 @@ import {
   runPrediction,
   getAISummary,
   getModels,
+  getModelFeatures,
   scheduleInspection,
   getInverterRawHistory,
   getInverterIds,
@@ -18,6 +19,9 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  BarChart,
+  Bar,
+  Cell,
 } from "recharts";
 
 const InverterDetail = () => {
@@ -141,6 +145,11 @@ const InverterDetail = () => {
   const [availableInverters, setAvailableInverters] = useState([]);
   const [batchPredictions, setBatchPredictions] = useState([]);
   const [predictionInverterId, setPredictionInverterId] = useState(id || "");
+  const [inputMode, setInputMode] = useState("manual");
+  const [apiTestResult, setApiTestResult] = useState(null);
+  const [apiTestLoading, setApiTestLoading] = useState(false);
+  const [recommendedPrimaryFeatures, setRecommendedPrimaryFeatures] = useState([]);
+  const [step, setStep] = useState(1);
 
   useEffect(() => {
     const loadModels = async () => {
@@ -166,9 +175,28 @@ const InverterDetail = () => {
         console.error("Failed to load inverters list");
       }
     };
+    const loadModelFeatures = async () => {
+      try {
+        const res = await getModelFeatures();
+        if (res.data.success && res.data.data && res.data.data.recommended_primary) {
+          setRecommendedPrimaryFeatures(res.data.data.recommended_primary);
+        }
+      } catch (err) {
+        console.error("Failed to load model features", err);
+      }
+    };
     loadModels();
     loadInverters();
+    loadModelFeatures();
   }, []);
+
+  // Sync URL id with local state and pre-fill when inverter changes
+  useEffect(() => {
+    if (id) {
+      setSearchInput(id);
+      setPredictionInverterId(id);
+    }
+  }, [id]);
 
   // Auto-fetch raw dataset history and populate telemetry on mount
   useEffect(() => {
@@ -247,6 +275,13 @@ const InverterDetail = () => {
     }
   };
 
+  const handleInverterSelect = (invId) => {
+    if (!invId) return;
+    setSearchInput(invId);
+    setPredictionInverterId(invId);
+    navigate(`/inverter/${invId}`);
+  };
+
   const handlePredict = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -255,19 +290,45 @@ const InverterDetail = () => {
     setSummary("");
 
     try {
-      if (!id) {
-        setError("Please provide an Inverter ID first.");
+      if (!predictionInverterId && !id) {
+        setError("Please provide an Inverter ID for the prediction payload.");
         setLoading(false);
         return;
       }
+
+      // Handle missing or zero features by imputing historical averages
+      const computedTelemetry = { ...telemetry };
+
+      const calculateAverage = (key) => {
+        if (!historyData || historyData.length === 0) return 0;
+        let sum = 0;
+        let count = 0;
+        historyData.forEach((row) => {
+          if (row[key] !== undefined && row[key] !== null && row[key] !== "") {
+            sum += parseFloat(row[key]) || 0;
+            count++;
+          }
+        });
+        return count > 0 ? sum / count : 0;
+      };
+
+      for (const [key, val] of Object.entries(computedTelemetry)) {
+        if (key === "failure_label") continue;
+        const numVal = Number(val);
+        if (isNaN(numVal) || numVal === 0 || val === "") {
+          computedTelemetry[key] = calculateAverage(key);
+        } else {
+          computedTelemetry[key] = numVal;
+        }
+      }
+
+      setTelemetry(computedTelemetry);
 
       // 1. Run ML Prediction
       const predRes = await runPrediction({
         inverterId: predictionInverterId || id,
         modelId: selectedModelId || undefined,
-        telemetry: Object.fromEntries(
-          Object.entries(telemetry).map(([k, v]) => [k, Number(v)]),
-        ),
+        telemetry: computedTelemetry,
       });
 
       if (predRes.data.success) {
@@ -293,12 +354,13 @@ const InverterDetail = () => {
             "AI Explanation temporarily unavailable. Please refer to risk score and factors.",
           );
         }
+        setStep(2); // Move to output view
       }
     } catch (err) {
       console.error(err);
       setError(
         err.response?.data?.message ||
-          "Failed to generate prediction from ML server.",
+        "Failed to generate prediction from ML server.",
       );
     }
 
@@ -359,8 +421,8 @@ const InverterDetail = () => {
                 );
                 const rows = timeKey
                   ? grouped[invId].sort(
-                      (a, b) => new Date(a[timeKey]) - new Date(b[timeKey]),
-                    )
+                    (a, b) => new Date(a[timeKey]) - new Date(b[timeKey]),
+                  )
                   : grouped[invId];
 
                 const currentRow = rows[rows.length - 1];
@@ -452,6 +514,7 @@ const InverterDetail = () => {
                 );
                 if (mainResult) {
                   setPrediction(mainResult);
+                  setStep(2);
                   // Get summary for main
                   getAISummary({
                     predictionId: mainResult._id,
@@ -489,6 +552,47 @@ const InverterDetail = () => {
       setError("Failed to load document parsing library over the network.");
       setLoading(false);
     }
+  };
+
+  const handleApiTest = async (e) => {
+    e.preventDefault();
+    const invId = predictionInverterId || id;
+    if (!invId) {
+      setError("Select an inverter first.");
+      return;
+    }
+    setApiTestLoading(true);
+    setApiTestResult(null);
+    setError("");
+    try {
+      const predRes = await runPrediction({
+        inverterId: invId,
+        modelId: selectedModelId || undefined,
+        telemetry: Object.fromEntries(
+          Object.entries(telemetry).map(([k, v]) => [k, Number(v)]),
+        ),
+      });
+      if (predRes.data.success) {
+        setApiTestResult(predRes.data.data);
+        setPrediction(predRes.data.data);
+        try {
+          const summaryRes = await getAISummary({
+            predictionId: predRes.data.data._id,
+            riskScore: predRes.data.data.riskScore,
+            topFeatures: predRes.data.data.topFeatures,
+            modelOutput: predRes.data.data.modelOutput,
+          });
+          if (summaryRes.data.success) setSummary(summaryRes.data.data.summary);
+        } catch (_) { }
+      } else {
+        setApiTestResult({ error: predRes.data.message || "Request failed" });
+      }
+    } catch (err) {
+      setApiTestResult({
+        error: err.response?.data?.message || "Failed to call prediction API.",
+      });
+    }
+    setApiTestLoading(false);
   };
 
   const handleScheduleInspection = async () => {
@@ -545,9 +649,27 @@ const InverterDetail = () => {
             flexDirection: "column",
             gap: "0.5rem",
             flex: 1,
-            maxWidth: "480px",
+            maxWidth: "520px",
           }}
         >
+          <label
+            style={{
+              fontSize: "0.9rem",
+              color: "var(--text-secondary)",
+              fontWeight: "500",
+            }}
+          >
+            Predict by Inverter ID
+          </label>
+          <p
+            style={{
+              fontSize: "0.8rem",
+              color: "var(--text-muted)",
+              margin: "0 0 0.5rem 0",
+            }}
+          >
+            Each plant has multiple inverters. Select an inverter to load its data and run predictions.
+          </p>
           {availableInverters.length > 0 && (
             <div
               style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}
@@ -556,9 +678,7 @@ const InverterDetail = () => {
                 value={
                   availableInverters.includes(searchInput) ? searchInput : ""
                 }
-                onChange={(e) => {
-                  if (e.target.value) setSearchInput(e.target.value);
-                }}
+                onChange={(e) => handleInverterSelect(e.target.value)}
                 style={{
                   padding: "0.6rem 1rem",
                   borderRadius: "8px",
@@ -569,7 +689,7 @@ const InverterDetail = () => {
                   fontSize: "0.9rem",
                 }}
               >
-                <option value="">— Select from dataset —</option>
+                <option value="">— Select inverter from dataset —</option>
                 {availableInverters.map((inv) => (
                   <option key={inv} value={inv}>
                     {inv}
@@ -698,11 +818,14 @@ const InverterDetail = () => {
             <h3 style={{ marginBottom: "1rem", color: "var(--text-primary)" }}>
               Recent Performance History
             </h3>
-            <div style={{ width: "100%", height: 350 }}>
-              <ResponsiveContainer>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "1rem" }}>
+              Inverter power (W) and energy today (kWh) over time — adjust these key parameters for better predictions.
+            </p>
+            <div style={{ width: "100%", height: 360 }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={historyData}
-                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                  margin={{ top: 16, right: 24, left: 8, bottom: 8 }}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -712,54 +835,65 @@ const InverterDetail = () => {
                   <XAxis
                     dataKey="datetime"
                     stroke="var(--text-secondary)"
-                    tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
                     tickFormatter={(val) => {
-                      // Extract time from '2022-04-11 15:30:00'
                       try {
-                        return val.split(" ")[1].substring(0, 5);
+                        if (typeof val === "string" && val.includes(" ")) return val.split(" ")[1].substring(0, 5);
+                        return val;
                       } catch (e) {
                         return val;
                       }
                     }}
+                    label={{ value: "Time", position: "insideBottom", offset: -4, fill: "var(--text-muted)", fontSize: 11 }}
                   />
                   <YAxis
                     yAxisId="left"
                     stroke="var(--text-secondary)"
-                    tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                    label={{ value: "Power (W)", angle: -90, position: "insideLeft", fill: "var(--text-muted)", fontSize: 11 }}
+                    domain={["auto", "auto"]}
+                    allowDataOverflow
                   />
                   <YAxis
                     yAxisId="right"
                     orientation="right"
                     stroke="var(--text-secondary)"
-                    tick={{ fill: "var(--text-secondary)", fontSize: 12 }}
+                    tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                    label={{ value: "Energy (kWh)", angle: 90, position: "insideRight", fill: "var(--text-muted)", fontSize: 11 }}
+                    domain={["auto", "auto"]}
+                    allowDataOverflow
                   />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "var(--bg-surface)",
-                      borderColor: "var(--border-color)",
+                      border: "1px solid var(--border-color)",
                       borderRadius: "8px",
+                      padding: "10px 14px",
                     }}
-                    labelStyle={{ color: "var(--text-primary)" }}
+                    labelStyle={{ color: "var(--text-primary)", marginBottom: "6px" }}
+                    formatter={(value) => [Number(value).toFixed(2), ""]}
+                    labelFormatter={(label) => (typeof label === "string" && label.includes(" ") ? label : label)}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: "12px" }} />
                   <Line
                     yAxisId="left"
                     type="monotone"
-                    name="Inverter Power"
+                    name="Inverter Power (W)"
                     dataKey="inverter_power"
                     stroke="var(--accent-primary)"
                     strokeWidth={2}
                     dot={false}
-                    activeDot={{ r: 6 }}
+                    activeDot={{ r: 6, fill: "var(--accent-primary)" }}
                   />
                   <Line
                     yAxisId="right"
                     type="monotone"
-                    name="Energy Today"
+                    name="Energy Today (kWh)"
                     dataKey="energy_today"
                     stroke="var(--status-medium-risk)"
                     strokeWidth={2}
                     dot={false}
+                    activeDot={{ r: 6 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -768,9 +902,99 @@ const InverterDetail = () => {
         )}
       </div>
 
+      {step === 2 && prediction && (
+        <div className="card" style={{ padding: "1.5rem", marginBottom: "1.5rem", position: "relative" }}>
+          <button
+            onClick={() => setStep(1)}
+            style={{
+              position: "absolute",
+              top: "1.5rem",
+              right: "1.5rem",
+              padding: "0.5rem 1rem",
+              backgroundColor: "var(--bg-sub-surface)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--border-color)",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              fontWeight: "bold"
+            }}
+          >
+            ← Back to Data Entry
+          </button>
+          <h3 style={{ marginBottom: "0.5rem", color: "var(--text-primary)" }}>Prediction Output</h3>
+          <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "1.25rem" }}>
+            Risk score and top contributing factors from the model. Use these to tune key inspection parameters above.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "1.5rem", alignItems: "start" }}>
+            <div>
+              <h4 style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>Risk Score</h4>
+              <div style={{ height: "28px", backgroundColor: "var(--bg-main)", borderRadius: "8px", overflow: "hidden", border: "1px solid var(--border-color)" }}>
+                <div
+                  style={{
+                    width: `${Math.min(100, Math.max(0, prediction.riskScore))}%`,
+                    height: "100%",
+                    backgroundColor: prediction.riskScore >= 70 ? "var(--status-high-risk)" : prediction.riskScore >= 40 ? "var(--status-medium-risk)" : "var(--status-low-risk)",
+                    borderRadius: "6px",
+                    transition: "width 0.5s ease",
+                  }}
+                />
+              </div>
+              <p style={{ marginTop: "0.5rem", fontWeight: "bold", fontSize: "1.1rem", color: prediction.riskScore >= 70 ? "var(--status-high-risk)" : prediction.riskScore >= 40 ? "var(--status-medium-risk)" : "var(--status-low-risk)" }}>
+                {prediction.riskScore}%
+              </p>
+            </div>
+            <div>
+              <h4 style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>Top Contributing Factors (SHAP)</h4>
+              {prediction.topFeatures && prediction.topFeatures.length > 0 ? (
+                <div style={{ width: "100%", height: 240 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={prediction.topFeatures.map((f) => ({ name: f.name, value: f.value }))}
+                      layout="vertical"
+                      margin={{ top: 8, right: 24, left: 8, bottom: 8 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" horizontal={false} />
+                      <XAxis
+                        type="number"
+                        stroke="var(--text-secondary)"
+                        tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                        domain={["auto", "auto"]}
+                      />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        stroke="var(--text-secondary)"
+                        tick={{ fill: "var(--text-secondary)", fontSize: 11 }}
+                        width={160}
+                      />
+                      <Tooltip
+                        cursor={{ fill: "var(--bg-sub-surface)" }}
+                        contentStyle={{ backgroundColor: "var(--bg-surface)", border: "1px solid var(--border-color)", borderRadius: "8px" }}
+                        formatter={(value) => [Number(value).toFixed(4), "SHAP value"]}
+                      />
+                      <Bar dataKey="value" radius={[0, 4, 4, 0]} name="Contribution">
+                        {prediction.topFeatures.map((_, idx) => (
+                          <Cell
+                            key={idx}
+                            fill={prediction.topFeatures[idx].value > 0 ? "var(--status-high-risk)" : "var(--status-low-risk)"}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>No factors available.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         style={{
-          display: "grid",
+          display: step === 1 ? "grid" : "none",
           gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
           gap: "1.5rem",
         }}
@@ -783,55 +1007,159 @@ const InverterDetail = () => {
               justifyContent: "space-between",
               alignItems: "center",
               marginBottom: "1.5rem",
+              flexWrap: "wrap",
+              gap: "0.75rem",
             }}
           >
             <h3 style={{ margin: 0, color: "var(--accent-secondary)" }}>
               Submit Telemetry for Prediction
             </h3>
+            <div style={{ display: "flex", gap: "0.25rem" }}>
+              {["csv", "manual"].map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setInputMode(mode)}
+                  style={{
+                    padding: "0.5rem 0.75rem",
+                    borderRadius: "8px",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: "0.85rem",
+                    fontWeight: inputMode === mode ? "bold" : "normal",
+                    backgroundColor: inputMode === mode ? "var(--accent-primary)" : "var(--bg-sub-surface)",
+                    color: inputMode === mode ? "#000" : "var(--text-primary)",
+                    border: inputMode === mode ? "none" : "1px solid var(--border-color)",
+                  }}
+                >
+                  {mode === "csv" ? "CSV Upload" : "Manual Entry"}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div
-            style={{
-              padding: "1rem",
-              backgroundColor: "var(--bg-main)",
-              borderRadius: "8px",
-              marginBottom: "1.5rem",
-              border: "1px dashed var(--border-color)",
-            }}
-          >
-            <h4
-              style={{
-                fontSize: "0.9rem",
-                marginBottom: "0.5rem",
-                color: "var(--text-secondary)",
-              }}
-            >
-              Auto-fill from Dataset
-            </h4>
-            <p
-              style={{
-                fontSize: "0.8rem",
-                color: "var(--text-muted)",
-                marginBottom: "0.8rem",
-              }}
-            >
-              Upload a CSV or Excel file containing system data. The first row
-              will be used to populate the telemetry fields below.
-            </p>
-            <input
-              type="file"
-              accept=".csv, .xlsx, .xls"
-              onChange={handleDatasetUpload}
-              disabled={loading || !id}
-              style={{ width: "100%", fontSize: "0.85rem" }}
-            />
-          </div>
 
-          <form
-            onSubmit={handlePredict}
-            style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-          >
-            {models.length > 0 && (
+          {inputMode === "csv" && (
+            <div style={{ padding: "1rem", backgroundColor: "var(--bg-main)", borderRadius: "8px", marginBottom: "1.5rem", border: "1px dashed var(--border-color)" }}>
+              <h4 style={{ fontSize: "0.95rem", marginBottom: "0.5rem", color: "var(--text-secondary)" }}>Upload CSV / Excel with multiple inverters</h4>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "1.5rem" }}>
+                File must include an <strong>inverter_id</strong> (or inverterid) column. Rows are grouped by inverter; the latest row per inverter passes to the ML model.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                {models.length > 0 && (
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>Model to use</label>
+                    <select value={selectedModelId} onChange={(e) => setSelectedModelId(e.target.value)} style={{ width: "100%", padding: "0.8rem", borderRadius: "8px", border: "1px solid var(--border-color)", backgroundColor: "var(--bg-sub-surface)", color: "var(--text-primary)" }}>
+                      {models.map((m) => (<option key={m.id} value={m.id}>{m.name} {m.active ? "(Active default)" : ""}</option>))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: "block", fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.5rem" }}>
+                    Dataset File <span style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}>(auto-analyzes on upload)</span>
+                  </label>
+                  <label style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    padding: "2rem",
+                    backgroundColor: "var(--bg-sub-surface)",
+                    border: "2px dashed var(--accent-primary)",
+                    borderRadius: "8px",
+                    cursor: loading ? "not-allowed" : "pointer",
+                    opacity: loading ? 0.7 : 1,
+                    transition: "all 0.2s ease"
+                  }}>
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={handleDatasetUpload}
+                      disabled={loading}
+                      style={{ display: "none" }}
+                    />
+                    <span style={{ fontSize: "1rem", fontWeight: "bold", color: "var(--text-primary)" }}>
+                      {loading ? "Analyzing Upload..." : "Click to select CSV/Excel file"}
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {inputMode === "manual" && (
+            <div
+              style={{
+                padding: "1rem",
+                backgroundColor: "var(--bg-main)",
+                borderRadius: "8px",
+                marginBottom: "1.5rem",
+                border: "1px dashed var(--border-color)",
+              }}
+            >
+              <h4
+                style={{
+                  fontSize: "0.9rem",
+                  marginBottom: "0.5rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                {id ? "Pre-filled for this inverter" : "Manual Data Entry"}
+              </h4>
+              <p
+                style={{
+                  fontSize: "0.8rem",
+                  color: "var(--text-muted)",
+                  marginBottom: "0",
+                }}
+              >
+                {id
+                  ? "Telemetry below is loaded for the selected inverter. You can edit values manually before analyzing."
+                  : "Select an inverter above to load baseline telemetry, then edit values to predict."}
+              </p>
+            </div>
+          )}
+
+          {inputMode === "manual" && (
+            <form
+              onSubmit={handlePredict}
+              style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+            >
+              {models.length > 0 && (
+                <div>
+                  <label
+                    style={{
+                      display: "block",
+                      fontSize: "0.9rem",
+                      color: "var(--text-secondary)",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    Model to use
+                  </label>
+                  <select
+                    value={selectedModelId}
+                    onChange={(e) => setSelectedModelId(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.8rem",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border-color)",
+                      backgroundColor: "var(--bg-sub-surface)",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} {m.active ? "(Active default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Inverter ID for this prediction */}
               <div>
                 <label
                   style={{
@@ -841,169 +1169,165 @@ const InverterDetail = () => {
                     marginBottom: "0.5rem",
                   }}
                 >
-                  Model to use
+                  Inverter ID{" "}
+                  <span
+                    style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}
+                  >
+                    (used in prediction payload)
+                  </span>
                 </label>
-                <select
-                  value={selectedModelId}
-                  onChange={(e) => setSelectedModelId(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.8rem",
-                    borderRadius: "8px",
-                    border: "1px solid var(--border-color)",
-                    backgroundColor: "var(--bg-sub-surface)",
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  {models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} {m.active ? "(Active default)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Inverter ID for this prediction */}
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: "0.9rem",
-                  color: "var(--text-secondary)",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                Inverter ID{" "}
-                <span
-                  style={{ color: "var(--text-muted)", fontSize: "0.8rem" }}
-                >
-                  (used in prediction payload)
-                </span>
-              </label>
-              {availableInverters.length > 0 && (
-                <select
-                  value={
-                    availableInverters.includes(predictionInverterId)
-                      ? predictionInverterId
-                      : ""
-                  }
-                  onChange={(e) => {
-                    if (e.target.value) setPredictionInverterId(e.target.value);
-                  }}
+                {availableInverters.length > 0 && (
+                  <select
+                    value={
+                      availableInverters.includes(predictionInverterId)
+                        ? predictionInverterId
+                        : ""
+                    }
+                    onChange={(e) => {
+                      if (e.target.value) setPredictionInverterId(e.target.value);
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "0.6rem 0.8rem",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border-color)",
+                      backgroundColor: "var(--bg-sub-surface)",
+                      color: "var(--text-primary)",
+                      marginBottom: "0.4rem",
+                      fontSize: "0.9rem",
+                    }}
+                  >
+                    <option value="">— Select from dataset —</option>
+                    {availableInverters.map((inv) => (
+                      <option key={inv} value={inv}>
+                        {inv}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  type="text"
+                  value={predictionInverterId}
+                  onChange={(e) => setPredictionInverterId(e.target.value)}
+                  placeholder="Type Inverter ID (e.g. inv-1, plant_1_inv_3)"
                   style={{
                     width: "100%",
                     padding: "0.6rem 0.8rem",
                     borderRadius: "8px",
-                    border: "1px solid var(--border-color)",
+                    border: "1px solid var(--accent-primary)",
                     backgroundColor: "var(--bg-sub-surface)",
                     color: "var(--text-primary)",
-                    marginBottom: "0.4rem",
                     fontSize: "0.9rem",
+                    boxSizing: "border-box",
                   }}
-                >
-                  <option value="">— Select from dataset —</option>
-                  {availableInverters.map((inv) => (
-                    <option key={inv} value={inv}>
-                      {inv}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <input
-                type="text"
-                value={predictionInverterId}
-                onChange={(e) => setPredictionInverterId(e.target.value)}
-                placeholder="Type Inverter ID (e.g. inv-1, plant_1_inv_3)"
-                style={{
-                  width: "100%",
-                  padding: "0.6rem 0.8rem",
-                  borderRadius: "8px",
-                  border: "1px solid var(--accent-primary)",
-                  backgroundColor: "var(--bg-sub-surface)",
-                  color: "var(--text-primary)",
-                  fontSize: "0.9rem",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
+                />
+              </div>
 
-            {Object.keys(telemetry)
-              .filter(
-                (key) =>
+              {(() => {
+                const baseFilter = (key) =>
                   !key.endsWith("_rolling_mean") &&
                   !key.endsWith("_diff") &&
                   !key.endsWith("_std") &&
-                  key !== "failure_label",
-              )
-              .map((key) => (
-                <div key={key}>
-                  <label
-                    style={{
-                      display: "block",
-                      fontSize: "0.8rem",
-                      color: "var(--text-secondary)",
-                      marginBottom: "0.3rem",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}
-                    title={key}
-                  >
-                    {key.replace(/_/g, " ")}
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    name={key}
-                    value={telemetry[key]}
-                    onChange={handleInputChange}
-                    style={{
-                      width: "100%",
-                      padding: "0.6rem",
-                      borderRadius: "6px",
-                      border: "1px solid var(--border-color)",
-                      backgroundColor: "var(--bg-sub-surface)",
-                      color: "var(--text-primary)",
-                      fontSize: "0.9rem",
-                    }}
-                  />
-                </div>
-              ))}
+                  key !== "failure_label";
+                const allKeys = Object.keys(telemetry).filter(baseFilter);
+                const primarySet = new Set(recommendedPrimaryFeatures);
+                const primaryKeys = allKeys.filter((k) => primarySet.has(k));
+                const otherKeys = allKeys.filter((k) => !primarySet.has(k));
+                const renderInput = (key) => (
+                  <div key={key}>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: "0.8rem",
+                        color: "var(--text-secondary)",
+                        marginBottom: "0.3rem",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                      title={key}
+                    >
+                      {key.replace(/_/g, " ")}
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      name={key}
+                      value={telemetry[key]}
+                      onChange={handleInputChange}
+                      style={{
+                        width: "100%",
+                        padding: "0.6rem",
+                        borderRadius: "6px",
+                        border: "1px solid var(--border-color)",
+                        backgroundColor: "var(--bg-sub-surface)",
+                        color: "var(--text-primary)",
+                        fontSize: "0.9rem",
+                      }}
+                    />
+                  </div>
+                );
+                return (
+                  <>
+                    {primaryKeys.length > 0 && (
+                      <>
+                        <h4 style={{ fontSize: "0.9rem", color: "var(--accent-primary)", marginBottom: "0.5rem" }}>
+                          Key inspection parameters (most important for prediction)
+                        </h4>
+                        {primaryKeys.map(renderInput)}
+                        <h4 style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginTop: "1rem", marginBottom: "0.5rem" }}>
+                          Other parameters
+                        </h4>
+                      </>
+                    )}
+                    {otherKeys.map(renderInput)}
+                  </>
+                );
+              })()}
 
-            <button
-              type="submit"
-              disabled={loading || !id}
-              style={{
-                padding: "1rem",
-                marginTop: "1rem",
-                backgroundColor: "var(--accent-primary)",
-                color: "#000",
-                fontWeight: "bold",
-                borderRadius: "8px",
-                border: "none",
-                cursor: loading || !id ? "not-allowed" : "pointer",
-                opacity: loading || !id ? 0.7 : 1,
-              }}
-            >
-              {loading ? "Analyzing Telemetry via ML..." : "Run Diagnostics"}
-            </button>
-            {error && (
-              <p
+              <button
+                type="submit"
+                disabled={loading}
                 style={{
-                  color: "var(--status-high-risk)",
-                  fontSize: "0.9rem",
-                  marginTop: "0.5rem",
+                  padding: "1rem",
+                  marginTop: "1rem",
+                  backgroundColor: "var(--accent-primary)",
+                  color: "#000",
+                  fontWeight: "bold",
+                  borderRadius: "8px",
+                  border: "none",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  opacity: loading ? 0.7 : 1,
                 }}
               >
-                {error}
-              </p>
-            )}
-          </form>
+                {loading ? "Analyzing Telemetry via ML..." : "Run Diagnostics"}
+              </button>
+              {error && (
+                <p
+                  style={{
+                    color: "var(--status-high-risk)",
+                    fontSize: "0.9rem",
+                    marginTop: "0.5rem",
+                  }}
+                >
+                  {error}
+                </p>
+              )}
+            </form>
+          )}
         </div>
+      </div>
 
-        {/* AI Explanation Result */}
-        <div>
+
+      {step === 2 && (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))",
+            gap: "1.5rem",
+          }}
+        >
+          {/* AI Explanation Result shows purely in output step */}
           <div
             className="card"
             style={{
@@ -1099,10 +1423,10 @@ const InverterDetail = () => {
                       marginBottom: "0.5rem",
                     }}
                   >
-                    Top Contributing Factors (SHAP):
+                    Top Contributing Factors (List):
                   </h4>
                   {prediction.topFeatures &&
-                  prediction.topFeatures.length > 0 ? (
+                    prediction.topFeatures.length > 0 ? (
                     <ul
                       style={{
                         paddingLeft: "1.5rem",
@@ -1142,117 +1466,120 @@ const InverterDetail = () => {
             )}
           </div>
         </div>
-      </div>
+      )
+      }
 
-      {batchPredictions.length > 1 && (
-        <div style={{ marginTop: "2rem" }} className="card">
-          <h3
-            style={{ marginBottom: "1rem", color: "var(--accent-secondary)" }}
-          >
-            Batch Prediction Results
-          </h3>
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                textAlign: "left",
-              }}
+      {
+        batchPredictions.length > 1 && (
+          <div style={{ marginTop: "2rem" }} className="card">
+            <h3
+              style={{ marginBottom: "1rem", color: "var(--accent-secondary)" }}
             >
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border-color)" }}>
-                  <th
-                    style={{
-                      padding: "0.8rem",
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    Inverter ID
-                  </th>
-                  <th
-                    style={{
-                      padding: "0.8rem",
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    Risk Score
-                  </th>
-                  <th
-                    style={{
-                      padding: "0.8rem",
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    Risk Level
-                  </th>
-                  <th
-                    style={{
-                      padding: "0.8rem",
-                      color: "var(--text-secondary)",
-                    }}
-                  >
-                    Top Factor
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {batchPredictions.map((pred) => (
-                  <tr
-                    key={pred._id || pred.inverterId}
-                    style={{ borderBottom: "1px solid var(--border-color)" }}
-                  >
-                    <td
-                      style={{
-                        padding: "0.8rem",
-                        color: "var(--text-primary)",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      {pred.inverterId}
-                    </td>
-                    <td
-                      style={{
-                        padding: "0.8rem",
-                        color: "var(--text-primary)",
-                      }}
-                    >
-                      {pred.riskScore}%
-                    </td>
-                    <td
-                      style={{
-                        padding: "0.8rem",
-                        color:
-                          pred.riskScore >= 70
-                            ? "var(--status-high-risk)"
-                            : pred.riskScore >= 40
-                              ? "var(--status-medium-risk)"
-                              : "var(--status-low-risk)",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      {pred.riskScore >= 70
-                        ? "High Risk"
-                        : pred.riskScore >= 40
-                          ? "Medium Risk"
-                          : "Low Risk"}
-                    </td>
-                    <td
+              Batch Prediction Results
+            </h3>
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  textAlign: "left",
+                }}
+              >
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border-color)" }}>
+                    <th
                       style={{
                         padding: "0.8rem",
                         color: "var(--text-secondary)",
                       }}
                     >
-                      {pred.topFeatures && pred.topFeatures.length > 0
-                        ? `${pred.topFeatures[0].name} (+${pred.topFeatures[0].value.toFixed(2)})`
-                        : "N/A"}
-                    </td>
+                      Inverter ID
+                    </th>
+                    <th
+                      style={{
+                        padding: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      Risk Score
+                    </th>
+                    <th
+                      style={{
+                        padding: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      Risk Level
+                    </th>
+                    <th
+                      style={{
+                        padding: "0.8rem",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      Top Factor
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {batchPredictions.map((pred) => (
+                    <tr
+                      key={pred._id || pred.inverterId}
+                      style={{ borderBottom: "1px solid var(--border-color)" }}
+                    >
+                      <td
+                        style={{
+                          padding: "0.8rem",
+                          color: "var(--text-primary)",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {pred.inverterId}
+                      </td>
+                      <td
+                        style={{
+                          padding: "0.8rem",
+                          color: "var(--text-primary)",
+                        }}
+                      >
+                        {pred.riskScore}%
+                      </td>
+                      <td
+                        style={{
+                          padding: "0.8rem",
+                          color:
+                            pred.riskScore >= 70
+                              ? "var(--status-high-risk)"
+                              : pred.riskScore >= 40
+                                ? "var(--status-medium-risk)"
+                                : "var(--status-low-risk)",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {pred.riskScore >= 70
+                          ? "High Risk"
+                          : pred.riskScore >= 40
+                            ? "Medium Risk"
+                            : "Low Risk"}
+                      </td>
+                      <td
+                        style={{
+                          padding: "0.8rem",
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        {pred.topFeatures && pred.topFeatures.length > 0
+                          ? `${pred.topFeatures[0].name} (+${pred.topFeatures[0].value.toFixed(2)})`
+                          : "N/A"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
     </motion.div>
   );
 };

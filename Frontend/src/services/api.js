@@ -33,6 +33,7 @@ export const verifyEmailDev = (email) => api.get(`/auth/verify-email-dev/${email
 
 // ML Config APIs
 export const getModels = () => api.get('/ml/models');
+export const getModelFeatures = () => api.get('/ml/models/features');
 export const setActiveModel = (model_id) => api.post('/ml/models/active', { model_id });
 export const trainModel = (formData) => api.post('/ml/train', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const getTrainProgress = () => api.get('/ml/train/progress');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { getApiPredictions, getApiKey } from '../services/api';
+import { getApiPredictions, getApiKey, runPrediction } from '../services/api';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace('/api', '') || 'http://localhost:80';
 
@@ -24,6 +24,11 @@ const ApiPredictionFeed = () => {
     const [maskedKey, setMaskedKey] = useState(null);
     const [copiedSnippet, setCopiedSnippet] = useState('');
     const [activeTab, setActiveTab] = useState('curl');
+    const [tryInverterId, setTryInverterId] = useState('INV-1');
+    const [tryTelemetry, setTryTelemetry] = useState({ inverter_power: 4523.5, pv1_power: 2200, energy_today: 18.5, inverter_temp: 45, grid_frequency: 50.02 });
+    const [tryResult, setTryResult] = useState(null);
+    const [tryLoading, setTryLoading] = useState(false);
+    const [tryError, setTryError] = useState('');
 
     const fetchRecords = useCallback(async (p = 1) => {
         setLoading(true);
@@ -98,6 +103,25 @@ print(f"Risk Score: {result['data']['riskScore']}%")`;
         setTimeout(() => setCopiedSnippet(''), 2000);
     };
 
+    const handleTryIt = async (e) => {
+        e.preventDefault();
+        setTryLoading(true);
+        setTryResult(null);
+        setTryError('');
+        try {
+            const res = await runPrediction({ inverterId: tryInverterId, telemetry: tryTelemetry });
+            if (res.data?.success && res.data?.data) {
+                setTryResult(res.data.data);
+                fetchRecords(1);
+            } else {
+                setTryError(res.data?.message || 'Request failed');
+            }
+        } catch (err) {
+            setTryError(err.response?.data?.message || err.message || 'Request failed');
+        }
+        setTryLoading(false);
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -159,6 +183,106 @@ print(f"Risk Score: {result['data']['riskScore']}%")`;
                         {copiedSnippet === activeTab ? '✓ Copied' : 'Copy'}
                     </button>
                 </div>
+            </div>
+
+            {/* Try it now - test predict with current session */}
+            <div className="card" style={{ marginBottom: '2rem' }}>
+                <h3 style={{ marginBottom: '1rem', color: 'var(--accent-secondary)' }}>Try it now</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                    Send a test prediction using your current session. No API key needed.
+                </p>
+                <form onSubmit={handleTryIt} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '400px' }}>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Inverter ID</label>
+                        <input
+                            type="text"
+                            value={tryInverterId}
+                            onChange={(e) => setTryInverterId(e.target.value)}
+                            placeholder="e.g. INV-1"
+                            style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>Sample telemetry (JSON keys)</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                            <input
+                                type="number"
+                                step="any"
+                                placeholder="inverter_power"
+                                value={tryTelemetry.inverter_power}
+                                onChange={(e) => setTryTelemetry(t => ({ ...t, inverter_power: Number(e.target.value) || 0 }))}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                                title="inverter_power"
+                            />
+                            <input
+                                type="number"
+                                step="any"
+                                placeholder="pv1_power"
+                                value={tryTelemetry.pv1_power}
+                                onChange={(e) => setTryTelemetry(t => ({ ...t, pv1_power: Number(e.target.value) || 0 }))}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                                title="pv1_power"
+                            />
+                            <input
+                                type="number"
+                                step="any"
+                                placeholder="energy_today"
+                                value={tryTelemetry.energy_today}
+                                onChange={(e) => setTryTelemetry(t => ({ ...t, energy_today: Number(e.target.value) || 0 }))}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                                title="energy_today"
+                            />
+                            <input
+                                type="number"
+                                step="any"
+                                placeholder="inverter_temp"
+                                value={tryTelemetry.inverter_temp}
+                                onChange={(e) => setTryTelemetry(t => ({ ...t, inverter_temp: Number(e.target.value) || 0 }))}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                                title="inverter_temp"
+                            />
+                            <input
+                                type="number"
+                                step="any"
+                                placeholder="grid_frequency"
+                                value={tryTelemetry.grid_frequency}
+                                onChange={(e) => setTryTelemetry(t => ({ ...t, grid_frequency: Number(e.target.value) || 0 }))}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                                title="grid_frequency"
+                            />
+                            <input
+                                type="number"
+                                step="any"
+                                placeholder="ambient_temperature"
+                                value={tryTelemetry.ambient_temperature}
+                                onChange={(e) => setTryTelemetry(t => ({ ...t, ambient_temperature: Number(e.target.value) || 0 }))}
+                                style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-sub-surface)', color: 'var(--text-primary)' }}
+                                title="ambient_temperature"
+                            />
+                        </div>
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={tryLoading}
+                        style={{ padding: '0.75rem 1.25rem', backgroundColor: 'var(--accent-primary)', color: '#000', fontWeight: 'bold', borderRadius: '8px', border: 'none', cursor: tryLoading ? 'not-allowed' : 'pointer', opacity: tryLoading ? 0.7 : 1 }}
+                    >
+                        {tryLoading ? 'Sending...' : 'Send test request'}
+                    </button>
+                    {tryError && <p style={{ color: 'var(--status-high-risk)', fontSize: '0.9rem' }}>{tryError}</p>}
+                </form>
+                {tryResult && (
+                    <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: 'var(--bg-main)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <h4 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Response</h4>
+                        <p style={{ marginBottom: '0.5rem' }}><strong>Inverter:</strong> {tryResult.inverterId}</p>
+                        <p style={{ marginBottom: '0.75rem' }}><strong>Risk:</strong> <RiskBadge score={tryResult.riskScore} /></p>
+                        <div style={{ height: '12px', backgroundColor: 'var(--bg-sub-surface)', borderRadius: '6px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+                            <div style={{ width: `${Math.min(100, tryResult.riskScore)}%`, height: '100%', backgroundColor: tryResult.riskScore >= 70 ? 'var(--status-high-risk)' : tryResult.riskScore >= 40 ? 'var(--status-medium-risk)' : 'var(--status-low-risk)', borderRadius: '4px' }} />
+                        </div>
+                        {tryResult.topFeatures?.[0] && (
+                            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Top factor: {tryResult.topFeatures[0].name} ({tryResult.topFeatures[0].value > 0 ? '+' : ''}{Number(tryResult.topFeatures[0].value).toFixed(3)})</p>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Predictions Table */}

@@ -8,6 +8,7 @@ const upload = multer({ dest: '/tmp/' });
 const router = express.Router();
 
 router.get('/models', protect, mlController.getModels);
+router.get('/models/features', protect, mlController.getModelFeatures);
 router.post('/models/active', protect, mlController.setActiveModel);
 router.get('/train/progress', protect, mlController.getTrainProgress);
 router.get('/dataset/summary', protect, mlController.getDatasetSummary);

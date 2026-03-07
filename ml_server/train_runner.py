@@ -43,23 +43,33 @@ def load_dataset(path: Path) -> pd.DataFrame:
 
 
 def preprocess_datetime(df: pd.DataFrame) -> pd.DataFrame:
-    dt_candidates = [
-        c for c in df.columns
-        if any(k in c.lower() for k in ("datetime", "timestamp", "date", "time"))
-    ]
-    if not dt_candidates:
-        raise ValueError("No datetime-like column found.")
-    dt_col = dt_candidates[0]
-    df[dt_col] = pd.to_datetime(df[dt_col])
-    df.rename(columns={dt_col: "datetime"}, inplace=True)
-    id_candidates = [
-        c for c in df.columns
-        if any(k in c.lower() for k in ("inverter_id", "plant_id", "device_id"))
-    ]
-    if id_candidates:
-        df.rename(columns={id_candidates[0]: "inverter_id"}, inplace=True)
+    if "datetime" not in df.columns:
+        dt_candidates = [
+            c for c in df.columns
+            if any(k in c.lower() for k in ("datetime", "timestamp", "date", "time"))
+        ]
+        if not dt_candidates:
+            raise ValueError("No datetime-like column found.")
+        dt_col = dt_candidates[0]
+        df[dt_col] = pd.to_datetime(df[dt_col])
+        df.rename(columns={dt_col: "datetime"}, inplace=True)
     else:
-        df["inverter_id"] = "INV_1"
+        df["datetime"] = pd.to_datetime(df["datetime"])
+
+    if "inverter_id" not in df.columns:
+        id_candidates = [
+            c for c in df.columns
+            if any(k in c.lower() for k in ("inverter_id", "plant_id", "device_id"))
+        ]
+        if id_candidates:
+            id_candidates.sort(key=lambda x: 0 if "inverter" in x.lower() else 1)
+            df.rename(columns={id_candidates[0]: "inverter_id"}, inplace=True)
+        else:
+            df["inverter_id"] = "INV_1"
+            
+    # Drop any duplicated columns from prior renames to avoid pandas unique index errors
+    df = df.loc[:, ~df.columns.duplicated()]
+    
     df.sort_values(["inverter_id", "datetime"], inplace=True)
     df.reset_index(drop=True, inplace=True)
     return df

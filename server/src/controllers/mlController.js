@@ -87,13 +87,23 @@ async function getDatasetInverters(req, res, next) {
 
 async function getDatasetInverterHistory(req, res, next) {
     try {
-        const { inverterId } = req.params;
+        let { inverterId } = req.params;
         const limit = req.query.limit || 50;
         const response = await axios.get(`${ML_BASE_URL}/dataset/inverters/${inverterId}?limit=${limit}`);
         res.json(response.data);
     } catch (err) {
         if (err.response) return res.status(err.response.status).json(err.response.data);
         res.status(502).json({ success: false, message: 'Could not fetch inverter history from ML server.' });
+    }
+}
+
+async function getModelFeatures(req, res, next) {
+    try {
+        const response = await axios.get(`${ML_BASE_URL}/models/features`, { timeout: 10000 });
+        res.json(response.data);
+    } catch (err) {
+        if (err.response) return res.status(err.response.status).json(err.response.data);
+        res.status(502).json({ success: false, message: 'Could not fetch model features from ML server.' });
     }
 }
 
@@ -128,9 +138,30 @@ async function trainModel(req, res, next) {
 
 async function predict(req, res, next) {
     try {
+        let invID = req.body.inverterId || req.body.inverter_id;
+        let telemetry = req.body.telemetry || req.body.features;
+
+        if (invID && (telemetry || req.body.telemetry !== undefined)) {
+            try {
+                const histRes = await axios.get(`${ML_BASE_URL}/dataset/inverters/${invID}?limit=1`, { timeout: 8000 });
+                if (histRes.data && histRes.data.success && Array.isArray(histRes.data.data) && histRes.data.data.length > 0) {
+                    const lastRow = histRes.data.data[histRes.data.data.length - 1];
+                    const base = {};
+                    for (const [k, v] of Object.entries(lastRow)) {
+                        if (k === 'datetime' || k === 'inverter_id') continue;
+                        if (typeof v === 'number' || (typeof v === 'string' && v !== '' && !isNaN(Number(v)))) base[k] = Number(v);
+                    }
+                    telemetry = { ...base, ...(telemetry && typeof telemetry === 'object' ? telemetry : {}) };
+                }
+            } catch (_) { /* use request telemetry only if history fetch fails */ }
+        }
+        if (!telemetry || typeof telemetry !== 'object') telemetry = req.body.telemetry || req.body.features || {};
+
         const payload = {
             ...req.body,
-            user_id: req.user._id // Pass user auth automatically
+            user_id: req.user._id,
+            telemetry: Object.keys(telemetry).length ? telemetry : req.body.telemetry,
+            features: req.body.features,
         };
         const response = await axios.post(`${ML_BASE_URL}/predict`, payload, { timeout: 30000 });
 
@@ -239,6 +270,7 @@ module.exports = {
     getDatasetSummary,
     getDatasetInverters,
     getDatasetInverterHistory,
+    getModelFeatures,
     trainModel,
     predict,
     scheduleInspection
