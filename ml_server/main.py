@@ -215,6 +215,7 @@ async def startup_generate_json_cache():
                 total_energy=("energy_today", "sum"),
                 reading_count=("datetime", "count"),
             ).reset_index()
+            agg = agg.fillna(0)
             agg["date"] = agg["date"].astype(str)
             with open(SUMMARY_JSON, "w") as f:
                 json.dump(agg.tail(60).to_dict(orient="records"), f)
@@ -228,11 +229,22 @@ async def startup_generate_json_cache():
 
             # -- per-inverter history --
             history = {}
+            import math
             for inv_id, grp in df.groupby("inverter_id"):
                 g = grp.sort_values("datetime").tail(50).copy()
                 g["datetime"] = g["datetime"].astype(str)
-                g = g.where(pd.notnull(g), None)
-                history[str(inv_id)] = g.to_dict(orient="records")
+                
+                records = []
+                for r in g.to_dict(orient="records"):
+                    clean_r = {}
+                    for k, v in r.items():
+                        if isinstance(v, float) and math.isnan(v):
+                            clean_r[k] = None
+                        else:
+                            clean_r[k] = v
+                    records.append(clean_r)
+                history[str(inv_id)] = records
+
             with open(HISTORY_JSON, "w") as f:
                 json.dump(history, f)
             print(f"[startup]  ✓ inverter_history.json ({len(history)} inverters)")
@@ -335,7 +347,19 @@ def get_dataset_inverter_history(inverter_id: str, limit: int = 50):
         return {"success": False, "message": "Inverter not found in dataset"}
     inv_df = inv_df.sort_values("datetime").tail(limit)
     inv_df["datetime"] = inv_df["datetime"].astype(str)
-    return {"success": True, "data": inv_df.to_dict(orient="records")}
+    
+    import math
+    records = []
+    for r in inv_df.to_dict(orient="records"):
+        clean_r = {}
+        for k, v in r.items():
+            if isinstance(v, float) and math.isnan(v):
+                clean_r[k] = None
+            else:
+                clean_r[k] = v
+        records.append(clean_r)
+
+    return {"success": True, "data": records}
 
 
 @app.get("/models")
