@@ -10,6 +10,11 @@ import InverterDetail from './pages/InverterDetail';
 import QnA from './pages/QnA';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
+import VerifyEmail from './pages/VerifyEmail';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import Alerts from './pages/Alerts';
+import ApiPredictionFeed from './pages/ApiPredictionFeed';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 
@@ -45,10 +50,22 @@ function AppRoutes() {
       <Route path="/about" element={<About />} />
       <Route path="/contact" element={<Contact />} />
 
-      {/* Auth Page */}
+      {/* Auth Pages */}
       <Route
         path="/login"
         element={token ? <Navigate to="/dashboard" replace /> : <Login />}
+      />
+      <Route
+        path="/forgot-password"
+        element={token ? <Navigate to="/dashboard" replace /> : <ForgotPassword />}
+      />
+      <Route
+        path="/reset-password"
+        element={token ? <Navigate to="/dashboard" replace /> : <ResetPassword />}
+      />
+      <Route
+        path="/verify-email"
+        element={<VerifyEmail />}
       />
 
       {/* Protected App Pages */}
@@ -58,9 +75,21 @@ function AppRoutes() {
         </ProtectedRoute>
       } />
 
+      <Route path="/inverter" element={
+        <ProtectedRoute>
+          <MainLayout><InverterDetail /></MainLayout>
+        </ProtectedRoute>
+      } />
+
       <Route path="/inverter/:id" element={
         <ProtectedRoute>
           <MainLayout><InverterDetail /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/alerts" element={
+        <ProtectedRoute>
+          <MainLayout><Alerts /></MainLayout>
         </ProtectedRoute>
       } />
 
@@ -79,6 +108,12 @@ function AppRoutes() {
       <Route path="/admin" element={
         <ProtectedRoute>
           <MainLayout><AdminDashboard /></MainLayout>
+        </ProtectedRoute>
+      } />
+
+      <Route path="/api-feed" element={
+        <ProtectedRoute>
+          <MainLayout><ApiPredictionFeed /></MainLayout>
         </ProtectedRoute>
       } />
 

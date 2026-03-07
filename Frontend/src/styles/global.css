@@ -129,7 +129,70 @@ button {
   border-radius: 4px;
 }
 
+/* Layout Classes */
+.app-sidebar {
+  width: var(--sidebar-width);
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 0;
+  z-index: 20;
+}
+
+.sidebar-logo {
+  padding: 0 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0 1rem;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background-color: transparent;
+  font-weight: 400;
+  transition: all 0.2s;
+}
+
+.sidebar-link.active {
+  color: var(--text-primary);
+  background-color: var(--bg-sub-surface);
+  font-weight: 600;
+}
+
+.app-navbar {
+  height: var(--navbar-height);
+  background-color: var(--bg-main);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 2rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
 /* Responsive Layout Rules */
+.mobile-logo-only {
+  display: none;
+}
+
 @media (max-width: 768px) {
 
   /* Hide static sidebar, adjust margins block */
@@ -137,6 +200,55 @@ button {
     margin-left: 0 !important;
     padding-bottom: 70px;
     /* Space for mobile bottom nav */
+  }
+
+  .app-sidebar {
+    height: 70px;
+    width: 100vw;
+    top: auto;
+    bottom: 0;
+    flex-direction: row;
+    padding: 0;
+    border-right: none;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--bg-main);
+  }
+
+  .sidebar-logo {
+    display: none;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    padding: 0;
+    gap: 0;
+  }
+
+  .sidebar-link {
+    flex-direction: column;
+    padding: 0.5rem;
+    gap: 0.2rem;
+    font-size: 0.65rem;
+    flex: 1;
+    justify-content: center;
+    border-radius: 0;
+    text-align: center;
+  }
+
+  .sidebar-link svg {
+    width: 20px;
+    height: 20px;
+    margin: 0 auto;
+  }
+
+  .nav-user-details {
+    display: none;
+  }
+
+  .mobile-logo-only {
+    display: block;
   }
 
   .page-wrapper {

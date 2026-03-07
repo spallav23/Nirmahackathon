@@ -20,7 +20,7 @@ def test_health():
     """GET /health returns status ok."""
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    assert r.json()["status"] == "ok"
 
 
 def test_models_empty():

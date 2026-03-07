@@ -14,8 +14,8 @@ function createTransporter() {
     port: Number(process.env.SMTP_PORT) || 587,
     secure: process.env.SMTP_SECURE === 'true',
     auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      user: process.env.SMTP_USER || 'spp23102003@gmail.com',
+      pass: process.env.SMTP_PASS || 'rcdn jatz eoma egcx',
     },
   });
 }
@@ -67,8 +67,9 @@ const consumer = kafka.consumer({ groupId: 'smtp-notification-group' });
 async function runConsumer() {
   try {
     await consumer.connect();
+    // Use KAFKA_TOPIC_EMAILS to match the main server, default to 'email_events'
     await consumer.subscribe({
-      topic: process.env.KAFKA_TOPIC_NOTIFICATIONS || 'notification_events',
+      topic: process.env.KAFKA_TOPIC_EMAILS || 'email_events',
       fromBeginning: true,
     });
 
@@ -77,18 +78,36 @@ async function runConsumer() {
         const value = message.value ? message.value.toString() : null;
         if (!value) return;
 
-        const emailOpts = buildAlertEmail(value);
+        let payload = {};
+        try {
+          payload = JSON.parse(value);
+        } catch (err) {
+          console.error("Failed to parse Kafka message payload", value);
+          return;
+        }
+
+        let emailOpts = {};
+
+        // If the payload already looks like a constructed email (from Auth controller), use it.
+        if (payload.subject && (payload.text || payload.html) && payload.to) {
+          emailOpts = {
+            to: payload.to,
+            subject: payload.subject,
+            text: payload.text,
+            html: payload.html,
+            from: payload.from || process.env.SMTP_FROM || process.env.SMTP_USER,
+          };
+        } else {
+          // Otherwise, assume it's a raw Notification/Risk Alert event
+          emailOpts = buildAlertEmail(payload);
+          emailOpts.from = process.env.SMTP_FROM || process.env.SMTP_USER;
+        }
+
         const transport = getTransporter();
 
         try {
-          await transport.sendMail({
-            from: process.env.SMTP_FROM || process.env.SMTP_USER,
-            to: emailOpts.to,
-            subject: emailOpts.subject,
-            text: emailOpts.text,
-            html: emailOpts.html,
-          });
-          console.log(`Sent alert email for inverter to ${emailOpts.to}`);
+          await transport.sendMail(emailOpts);
+          console.log(`Sent email for subject "${emailOpts.subject}" to ${emailOpts.to}`);
         } catch (err) {
           console.error('Failed to send email:', err.message);
         }

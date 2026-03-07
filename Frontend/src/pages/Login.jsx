@@ -111,6 +111,18 @@ const Login = () => {
                                 color: 'var(--text-primary)', fontSize: '1rem'
                             }}
                         />
+                        {isLogin && (
+                            <div style={{ textAlign: 'right', marginTop: '0.3rem' }}>
+                                <span
+                                    onClick={() => navigate('/forgot-password')}
+                                    style={{ color: 'var(--accent-primary)', fontSize: '0.85rem', cursor: 'pointer' }}
+                                    onMouseOver={e => e.target.style.textDecoration = 'underline'}
+                                    onMouseOut={e => e.target.style.textDecoration = 'none'}
+                                >
+                                    Forgot your password?
+                                </span>
+                            </div>
+                        )}
                     </div>
                     <button
                         type="submit"

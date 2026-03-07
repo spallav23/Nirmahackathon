@@ -115,6 +115,8 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+
+
 # -----------------------------------------------------------------------------
 # Request/Response models
 # -----------------------------------------------------------------------------
@@ -135,12 +137,205 @@ class PredictRequest(BaseModel):
 
 
 # -----------------------------------------------------------------------------
+# JSON Cache helpers  (written by preprocess_dataset.py)
+# -----------------------------------------------------------------------------
+SUMMARY_JSON = BASE_DIR / "dataset_summary.json"
+HISTORY_JSON = BASE_DIR / "inverter_history.json"
+IDS_JSON     = BASE_DIR / "inverter_ids.json"
+
+_json_summary:  list | None = None
+_json_history:  dict | None = None
+_json_ids:      list | None = None
+_cache_building: bool = False  # True while background thread is processing xlsx
+
+
+def _load_json_cache():
+    """Load all precomputed JSON files into memory once."""
+    global _json_summary, _json_history, _json_ids
+    if _json_summary is None and SUMMARY_JSON.exists():
+        with open(SUMMARY_JSON) as f:
+            _json_summary = json.load(f)
+        print(f"[cache] Loaded dataset_summary.json ({len(_json_summary)} records)")
+    if _json_history is None and HISTORY_JSON.exists():
+        with open(HISTORY_JSON) as f:
+            _json_history = json.load(f)
+        print(f"[cache] Loaded inverter_history.json ({len(_json_history)} inverters)")
+    if _json_ids is None and IDS_JSON.exists():
+        with open(IDS_JSON) as f:
+            _json_ids = json.load(f)
+        print(f"[cache] Loaded inverter_ids.json ({len(_json_ids)} IDs)")
+
+
+# Load immediately if files already exist (e.g. second restart)
+try:
+    _load_json_cache()
+except Exception as _e:
+    print(f"[cache] Could not pre-load JSON cache: {_e}")
+
+
+@app.on_event("startup")
+async def startup_generate_json_cache():
+    """
+    On first startup, kick off JSON cache generation in a background daemon thread.
+    The server starts accepting requests immediately (healthcheck passes right away).
+    Dataset endpoints return a 'still initialising' message until cache is ready.
+    On subsequent restarts the files already exist so this returns instantly.
+    """
+    global _cache_building
+
+    if _json_summary is not None:
+        print("[startup] JSON cache already in memory — ready.")
+        return
+
+    if SUMMARY_JSON.exists() and HISTORY_JSON.exists() and IDS_JSON.exists():
+        _load_json_cache()
+        print("[startup] JSON cache loaded from existing files.")
+        return
+
+    if not DEFAULT_DATASET.exists():
+        print("[startup] Dataset file not found; skipping cache generation.")
+        return
+
+    import threading
+
+    def _generate():
+        global _cache_building
+        _cache_building = True
+        try:
+            print("[startup] Building JSON dataset cache in background thread...")
+            from train_runner import load_dataset, preprocess_datetime
+            df = load_dataset(DEFAULT_DATASET)
+            df = preprocess_datetime(df)
+
+            # -- daily summary --
+            tmp = df.copy()
+            tmp["date"] = tmp["datetime"].dt.date
+            agg = tmp.groupby("date").agg(
+                total_power=("inverter_power", "sum"),
+                total_energy=("energy_today", "sum"),
+                reading_count=("datetime", "count"),
+            ).reset_index()
+            agg["date"] = agg["date"].astype(str)
+            with open(SUMMARY_JSON, "w") as f:
+                json.dump(agg.tail(60).to_dict(orient="records"), f)
+            print(f"[startup]  ✓ dataset_summary.json ({len(agg)} days)")
+
+            # -- inverter IDs --
+            ids = sorted(df["inverter_id"].dropna().unique().astype(str).tolist())
+            with open(IDS_JSON, "w") as f:
+                json.dump(ids, f)
+            print(f"[startup]  ✓ inverter_ids.json ({len(ids)} IDs)")
+
+            # -- per-inverter history --
+            history = {}
+            for inv_id, grp in df.groupby("inverter_id"):
+                g = grp.sort_values("datetime").tail(50).copy()
+                g["datetime"] = g["datetime"].astype(str)
+                g = g.where(pd.notnull(g), None)
+                history[str(inv_id)] = g.to_dict(orient="records")
+            with open(HISTORY_JSON, "w") as f:
+                json.dump(history, f)
+            print(f"[startup]  ✓ inverter_history.json ({len(history)} inverters)")
+
+            _load_json_cache()
+            print("[startup] ✓ JSON cache complete — dataset endpoints are now fully ready.")
+        except Exception as exc:
+            import traceback
+            print(f"[startup] JSON cache generation failed: {exc}")
+            traceback.print_exc()
+        finally:
+            _cache_building = False
+
+    t = threading.Thread(target=_generate, daemon=True)
+    t.start()
+    print("[startup] Server is ready. Dataset cache building in background...")
+
+
+# ---------------------------------------------------------------------------
+# Legacy in-memory xlsx loader (fallback ONLY if JSON cache not yet available)
+# ---------------------------------------------------------------------------
+_cached_dataset = None
+
+def _get_dataset() -> pd.DataFrame:
+    global _cached_dataset
+    if _cached_dataset is not None:
+        return _cached_dataset
+    if not DEFAULT_DATASET.exists():
+        return pd.DataFrame()
+    from train_runner import load_dataset, preprocess_datetime
+    try:
+        df = load_dataset(DEFAULT_DATASET)
+        df = preprocess_datetime(df)
+        _cached_dataset = df
+        return df
+    except Exception as e:
+        print("Failed to load dataset:", e)
+        return pd.DataFrame()
+
+
+# -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
 @app.get("/health")
 def health() -> dict:
-    """Health check for container orchestration."""
-    return {"status": "ok"}
+    """Health check — always responds immediately regardless of cache state."""
+    return {"status": "ok", "cache_ready": _json_summary is not None and _json_ids is not None}
+
+@app.get("/dataset/summary")
+def get_dataset_summary():
+    """Serve daily aggregated stats from JSON cache."""
+    if _json_summary is not None:
+        return {"success": True, "data": _json_summary}
+    if _cache_building:
+        return {"success": False, "message": "Dataset cache is still being built. Please try again in a minute.", "building": True}
+    # Try loading files (may have appeared since startup)
+    _load_json_cache()
+    if _json_summary is not None:
+        return {"success": True, "data": _json_summary}
+    return {"success": False, "message": "Dataset not available. Ensure solar_ml_master_dataset.xlsx is present and restart."}
+
+
+@app.get("/dataset/inverters")
+def get_unique_inverters():
+    """Return sorted inverter ID list from JSON cache."""
+    if _json_ids is not None:
+        return {"success": True, "data": _json_ids}
+    if _cache_building:
+        return {"success": False, "message": "Dataset cache is still being built. Please try again in a minute.", "building": True}
+    _load_json_cache()
+    if _json_ids is not None:
+        return {"success": True, "data": _json_ids}
+    return {"success": False, "message": "Dataset not available. Ensure solar_ml_master_dataset.xlsx is present and restart."}
+
+
+@app.get("/dataset/inverters/{inverter_id}")
+def get_dataset_inverter_history(inverter_id: str, limit: int = 50):
+    """Retrieve per-inverter history from JSON cache."""
+    if _json_history is not None:
+        records = _json_history.get(str(inverter_id))
+        if records is None:
+            return {"success": False, "message": f"Inverter '{inverter_id}' not found in dataset"}
+        return {"success": True, "data": records[-limit:]}
+    if _cache_building:
+        return {"success": False, "message": "Dataset cache is still being built. Please try again in a minute.", "building": True}
+    _load_json_cache()
+    if _json_history is not None:
+        records = _json_history.get(str(inverter_id))
+        if records is None:
+            return {"success": False, "message": f"Inverter '{inverter_id}' not found in dataset"}
+        return {"success": True, "data": records[-limit:]}
+    return {"success": False, "message": "Dataset not available. Ensure solar_ml_master_dataset.xlsx is present and restart."}
+
+    # Fallback: xlsx
+    df = _get_dataset()
+    if df.empty:
+        return {"success": False, "message": "Dataset not available. Run preprocess_dataset.py first."}
+    inv_df = df[df["inverter_id"] == inverter_id].copy()
+    if inv_df.empty:
+        return {"success": False, "message": "Inverter not found in dataset"}
+    inv_df = inv_df.sort_values("datetime").tail(limit)
+    inv_df["datetime"] = inv_df["datetime"].astype(str)
+    return {"success": True, "data": inv_df.to_dict(orient="records")}
 
 
 @app.get("/models")
@@ -219,6 +414,7 @@ def predict(req: PredictRequest):
             features = tel
         else:
             features = get_features(inverter_id)
+            print(features)
             if features is None:
                 raise HTTPException(
                     status_code=400,
