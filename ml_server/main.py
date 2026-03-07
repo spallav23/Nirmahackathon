@@ -472,26 +472,27 @@ def predict(req: PredictRequest):
     # SHAP explainability
     top_features = _compute_shap_top_features(model, X, feature_cols, top_k=5)
 
-    model_output = {"risk_score": risk_score, "inverter_id": inverter_id, "model": model_name or "unknown"}
+    model_output = {"risk_score": float(risk_score), "inverter_id": str(inverter_id), "model": str(model_name or "unknown")}
     request_id = str(uuid.uuid4())
 
     payload = {
         "requestId": request_id,
-        "inverterId": inverter_id,
-        "riskScore": risk_pct,
+        "inverterId": str(inverter_id),
+        "riskScore": float(risk_pct),
         "modelOutput": model_output,
         "topFeatures": top_features,
-        "userId": user_id,
+        "userId": str(user_id) if user_id else None,
     }
     _publish_prediction(payload)
 
     # Optionally store in Redis for future use
-    set_features(inverter_id, features)
+    safe_features = {str(k): float(v) for k, v in features.items()}
+    set_features(inverter_id, safe_features)
 
     return {
         "request_id": request_id,
-        "risk_score": risk_pct,
-        "inverter_id": inverter_id,
+        "risk_score": float(risk_pct),
+        "inverter_id": str(inverter_id),
         "top_features": top_features,
         "model_output": model_output,
         "message": "7-10 day failure risk prediction with SHAP explainability.",

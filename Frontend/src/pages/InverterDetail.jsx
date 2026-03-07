@@ -510,11 +510,11 @@ const InverterDetail = () => {
 
                 // Also update current main prediction if it's in the batch
                 const mainResult = validResults.find(
-                  (r) => r.inverterId === id,
+                  (r) => r.inverterId === id || r.inverterId === validResults[0].inverterId,
                 );
+
                 if (mainResult) {
                   setPrediction(mainResult);
-                  setStep(2);
                   // Get summary for main
                   getAISummary({
                     predictionId: mainResult._id,
@@ -529,6 +529,8 @@ const InverterDetail = () => {
                       setSummary("AI Explanation temporarily unavailable."),
                     );
                 }
+
+                setStep(2);
               }
             } else {
               setError("Uploaded file contins no recognizable inverter data.");
